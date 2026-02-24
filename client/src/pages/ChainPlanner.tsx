@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import { trpc } from "@/lib/trpc";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { Button } from "@/components/ui/button";
@@ -16,6 +16,8 @@ import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
+import { MapView } from "@/components/Map";
+import { Map as MapIcon } from "lucide-react";
 
 // Safe number formatter — prevents crashes when TiDB returns decimals as strings
 function fmt(val: unknown, decimals = 2): string {
@@ -151,6 +153,7 @@ type TransportLeg = {
   options: TransportOption[];
   selectedOptionIndex: number;
   noTransitZone: boolean;
+  departureTimestampSecs?: number;
 };
 
 type ChainJob = {
@@ -195,14 +198,38 @@ function TransportLegCard({
   legIndex,
   label,
   onSelectOption,
+  onEditLeg,
+  onDeleteLeg,
 }: {
   leg: TransportLeg;
   legIndex: number;
   label: string;
   onSelectOption: (legIndex: number, optionIndex: number) => void;
+  onEditLeg?: (legIndex: number, cost: number, mode: string, durationMins: number) => void;
+  onDeleteLeg?: (legIndex: number) => void;
 }) {
   const [expanded, setExpanded] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const [editCost, setEditCost] = useState("");
+  const [editMode, setEditMode] = useState("");
+  const [editDuration, setEditDuration] = useState("");
   const selectedOpt = leg.options[leg.selectedOptionIndex] ?? leg.options[0];
+
+  function startEdit() {
+    setEditCost(fmt(selectedOpt?.cost ?? 0));
+    setEditMode(selectedOpt?.mode ?? "Train");
+    setEditDuration(String(Math.round(selectedOpt?.durationMins ?? 30)));
+    setEditing(true);
+  }
+
+  function saveEdit() {
+    const cost = parseFloat(editCost);
+    const dur = parseInt(editDuration);
+    if (!isNaN(cost) && !isNaN(dur) && onEditLeg) {
+      onEditLeg(legIndex, cost, editMode, dur);
+    }
+    setEditing(false);
+  }
 
   return (
     <div className="flex items-start gap-3 py-1.5">
@@ -249,6 +276,70 @@ function TransportLegCard({
             )}
           </div>
         </button>
+
+        {/* Edit/Delete action row */}
+        <div className="flex gap-1.5 mt-1">
+          <button
+            onClick={startEdit}
+            className="flex items-center gap-1 text-[10px] text-muted-foreground hover:text-foreground transition-colors px-2 py-1 rounded-md hover:bg-secondary"
+          >
+            <Settings size={10} /> Edit price & mode
+          </button>
+          {onDeleteLeg && (
+            <button
+              onClick={() => onDeleteLeg(legIndex)}
+              className="flex items-center gap-1 text-[10px] text-muted-foreground hover:text-destructive transition-colors px-2 py-1 rounded-md hover:bg-secondary"
+            >
+              <Trash2 size={10} /> Remove leg
+            </button>
+          )}
+        </div>
+
+        {/* Inline edit form */}
+        {editing && (
+          <div className="mt-1.5 bg-secondary/60 border border-primary/30 rounded-xl p-3 space-y-2 animate-in fade-in duration-150">
+            <p className="text-xs font-semibold text-primary mb-2">Edit this leg</p>
+            <div className="grid grid-cols-3 gap-2">
+              <div>
+                <label className="text-[10px] text-muted-foreground">Mode</label>
+                <select
+                  value={editMode}
+                  onChange={e => setEditMode(e.target.value)}
+                  className="w-full mt-0.5 text-xs bg-background border border-border rounded-md px-2 py-1.5 text-foreground"
+                >
+                  {["Train", "Bus", "Taxi", "Walk", "Scooter", "Tube", "Tram", "Ferry"].map(m => (
+                    <option key={m} value={m}>{m}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="text-[10px] text-muted-foreground">Cost (£)</label>
+                <Input
+                  type="number"
+                  step="0.10"
+                  min="0"
+                  value={editCost}
+                  onChange={e => setEditCost(e.target.value)}
+                  className="mt-0.5 h-8 text-xs font-mono"
+                />
+              </div>
+              <div>
+                <label className="text-[10px] text-muted-foreground">Duration (min)</label>
+                <Input
+                  type="number"
+                  min="1"
+                  value={editDuration}
+                  onChange={e => setEditDuration(e.target.value)}
+                  className="mt-0.5 h-8 text-xs font-mono"
+                />
+              </div>
+            </div>
+            <div className="flex gap-2">
+              <Button size="sm" className="flex-1 h-7 text-xs" onClick={saveEdit}>Save</Button>
+              <Button size="sm" variant="outline" className="flex-1 h-7 text-xs" onClick={() => setEditing(false)}>Cancel</Button>
+            </div>
+          </div>
+        )}
 
         {expanded && (
           <div className="mt-1.5 bg-secondary/40 border border-border/40 rounded-xl p-3 space-y-2 animate-in fade-in slide-in-from-top-2 duration-200">
@@ -362,6 +453,64 @@ function DriveLegCard({ job, jobIndex }: { job: ChainJob; jobIndex: number }) {
   );
 }
 
+// Full-day route map component
+function ChainRouteMap({ jobs, homePostcode }: { jobs: ChainJob[]; homePostcode?: string }) {
+  const mapRef = useRef<google.maps.Map | null>(null);
+  const [mapReady, setMapReady] = useState(false);
+
+  useEffect(() => {
+    if (!mapReady || !mapRef.current || jobs.length === 0) return;
+    const map = mapRef.current;
+    const directionsService = new window.google.maps.DirectionsService();
+    const bounds = new window.google.maps.LatLngBounds();
+    const colors = ["#22c55e", "#3b82f6", "#f59e0b", "#ef4444"];
+
+    // Build waypoints: home → pickup1 → dropoff1 → pickup2 → dropoff2 → ...
+    const allPoints: string[] = [];
+    if (homePostcode) allPoints.push(homePostcode + ", UK");
+    for (const job of jobs) {
+      allPoints.push(job.pickupPostcode + ", UK");
+      allPoints.push(job.dropoffPostcode + ", UK");
+    }
+    if (homePostcode) allPoints.push(homePostcode + ", UK");
+
+    if (allPoints.length < 2) return;
+
+    const origin = allPoints[0]!;
+    const destination = allPoints[allPoints.length - 1]!;
+    const waypoints = allPoints.slice(1, -1).map(p => ({ location: p, stopover: true }));
+
+    directionsService.route(
+      { origin, destination, waypoints, travelMode: window.google.maps.TravelMode.DRIVING, optimizeWaypoints: false },
+      (result, status) => {
+        if (status === "OK" && result) {
+          const renderer = new window.google.maps.DirectionsRenderer({
+            map,
+            suppressMarkers: false,
+            polylineOptions: { strokeColor: colors[0], strokeWeight: 4, strokeOpacity: 0.8 },
+          });
+          renderer.setDirections(result);
+          // Fit bounds
+          result.routes[0]?.legs.forEach(leg => {
+            bounds.extend(leg.start_location);
+            bounds.extend(leg.end_location);
+          });
+          map.fitBounds(bounds, 40);
+        }
+      }
+    );
+  }, [mapReady, jobs, homePostcode]);
+
+  return (
+    <MapView
+      className="h-64 rounded-xl overflow-hidden"
+      initialCenter={{ lat: 52.5, lng: -1.5 }}
+      initialZoom={7}
+      onMapReady={(map) => { mapRef.current = map; setMapReady(true); }}
+    />
+  );
+}
+
 export default function ChainPlanner() {
   const { isAuthenticated } = useAuth();
   const [selectedJobIds, setSelectedJobIds] = useState<number[]>([]);
@@ -467,6 +616,109 @@ export default function ChainPlanner() {
     } catch {
       toast.error("Failed to add to calendar");
     }
+  };
+
+  // Edit a leg's cost/mode/duration manually
+  const handleEditLeg = (legIndex: number, cost: number, mode: string, durationMins: number) => {
+    setChainResult(prev => {
+      if (!prev) return prev;
+      const updatedLegs = prev.transportLegs.map((leg, i) => {
+        if (i !== legIndex) return leg;
+        // Update the selected option with the new values
+        const updatedOptions = leg.options.map((opt, oi) =>
+          oi === leg.selectedOptionIndex
+            ? { ...opt, cost, mode, durationMins, summary: mode }
+            : opt
+        );
+        // If no options exist, create a custom one
+        if (updatedOptions.length === 0) {
+          return { ...leg, options: [{ mode, cost, durationMins, summary: mode, operator: "Custom", changes: 0, departureTime: "Manual", arrivalTime: "Manual", steps: [] }], selectedOptionIndex: 0 };
+        }
+        return { ...leg, options: updatedOptions };
+      });
+      // Recalculate totals
+      let totalTransportCost = 0;
+      let totalTransportMins = 0;
+      for (const leg of updatedLegs) {
+        const opt = leg.options[leg.selectedOptionIndex] ?? leg.options[0];
+        if (opt) { totalTransportCost += opt.cost; totalTransportMins += opt.durationMins; }
+      }
+      const totalBrokerFees = Number(prev.summary.totalBrokerFees);
+      const totalEarnings = Number(prev.summary.totalEarnings);
+      const totalCosts = totalBrokerFees + totalTransportCost;
+      const totalNetProfit = totalEarnings - totalCosts;
+      const baseDriveMins = Number(prev.summary.totalDurationMins) -
+        prev.transportLegs.reduce((s, leg) => { const opt = leg.options[leg.selectedOptionIndex] ?? leg.options[0]; return s + (opt?.durationMins ?? 0); }, 0);
+      const totalDurationMins = baseDriveMins + totalTransportMins;
+      const profitPerHour = totalDurationMins > 0 ? (totalNetProfit / totalDurationMins) * 60 : 0;
+      return { ...prev, transportLegs: updatedLegs, summary: { ...prev.summary, totalTransportCost, totalCosts, totalNetProfit, totalDurationMins, profitPerHour } };
+    });
+    toast.success("Leg updated");
+  };
+
+  // Delete a transport leg
+  const handleDeleteLeg = (legIndex: number) => {
+    setChainResult(prev => {
+      if (!prev) return prev;
+      const updatedLegs = prev.transportLegs.filter((_, i) => i !== legIndex);
+      let totalTransportCost = 0;
+      let totalTransportMins = 0;
+      for (const leg of updatedLegs) {
+        const opt = leg.options[leg.selectedOptionIndex] ?? leg.options[0];
+        if (opt) { totalTransportCost += opt.cost; totalTransportMins += opt.durationMins; }
+      }
+      const totalBrokerFees = Number(prev.summary.totalBrokerFees);
+      const totalEarnings = Number(prev.summary.totalEarnings);
+      const totalCosts = totalBrokerFees + totalTransportCost;
+      const totalNetProfit = totalEarnings - totalCosts;
+      const baseDriveMins = prev.summary.totalDurationMins -
+        prev.transportLegs.reduce((s, leg) => { const opt = leg.options[leg.selectedOptionIndex] ?? leg.options[0]; return s + (opt?.durationMins ?? 0); }, 0);
+      const totalDurationMins = baseDriveMins + totalTransportMins;
+      const profitPerHour = totalDurationMins > 0 ? (totalNetProfit / totalDurationMins) * 60 : 0;
+      return { ...prev, transportLegs: updatedLegs, summary: { ...prev.summary, totalTransportCost, totalCosts, totalNetProfit, totalDurationMins, profitPerHour } };
+    });
+    // Re-index legSelections
+    setLegSelections(prev => prev.filter(s => s.legIndex !== legIndex).map(s => s.legIndex > legIndex ? { ...s, legIndex: s.legIndex - 1 } : s));
+    toast.success("Leg removed");
+  };
+
+  // Add a custom leg
+  const [showAddLeg, setShowAddLeg] = useState(false);
+  const [addLegFrom, setAddLegFrom] = useState("");
+  const [addLegTo, setAddLegTo] = useState("");
+  const [addLegMode, setAddLegMode] = useState("Train");
+  const [addLegCost, setAddLegCost] = useState("");
+  const [addLegDuration, setAddLegDuration] = useState("");
+
+  const handleAddLeg = () => {
+    const cost = parseFloat(addLegCost);
+    const dur = parseInt(addLegDuration);
+    if (!addLegFrom.trim() || !addLegTo.trim() || isNaN(cost) || isNaN(dur)) {
+      toast.error("Please fill in all fields");
+      return;
+    }
+    const newLeg: TransportLeg = {
+      fromPostcode: addLegFrom.trim().toUpperCase(),
+      toPostcode: addLegTo.trim().toUpperCase(),
+      legType: "reposition",
+      options: [{ mode: addLegMode, cost, durationMins: dur, summary: addLegMode, operator: "Custom", changes: 0, departureTime: "Manual", arrivalTime: "Manual", steps: [] }],
+      selectedOptionIndex: 0,
+      noTransitZone: false,
+      departureTimestampSecs: 0,
+    };
+    setChainResult(prev => {
+      if (!prev) return prev;
+      const updatedLegs = [...prev.transportLegs, newLeg];
+      const totalTransportCost = prev.summary.totalTransportCost + cost;
+      const totalTransportMins = prev.summary.totalDurationMins + dur;
+      const totalCosts = prev.summary.totalBrokerFees + totalTransportCost;
+      const totalNetProfit = prev.summary.totalEarnings - totalCosts;
+      const profitPerHour = totalTransportMins > 0 ? (totalNetProfit / totalTransportMins) * 60 : 0;
+      return { ...prev, transportLegs: updatedLegs, summary: { ...prev.summary, totalTransportCost, totalCosts, totalNetProfit, profitPerHour } };
+    });
+    setShowAddLeg(false);
+    setAddLegFrom(""); setAddLegTo(""); setAddLegCost(""); setAddLegDuration(""); setAddLegMode("Train");
+    toast.success("Leg added");
   };
 
   const handleSelectOption = (legIndex: number, optionIndex: number) => {
@@ -739,6 +991,11 @@ export default function ChainPlanner() {
                 <div className="space-y-0">
                   {buildTimeline(chainResult).map((item, idx) => {
                     if (item.type === "homeStart" || item.type === "homeEnd") {
+                      // Compute "leave by" time from the first transport leg
+                      const homeToPickupLeg = chainResult.transportLegs.find(l => l.legType === "homeToPickup");
+                      const leaveByTime = item.type === "homeStart" && homeToPickupLeg?.departureTimestampSecs
+                        ? new Date(homeToPickupLeg.departureTimestampSecs * 1000).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", hour12: false })
+                        : null;
                       return (
                         <div key={idx} className="flex items-center gap-3 py-2">
                           <div className="w-7 h-7 rounded-full bg-secondary border border-border flex items-center justify-center flex-shrink-0">
@@ -747,6 +1004,9 @@ export default function ChainPlanner() {
                           <div>
                             <span className="text-xs text-muted-foreground">{item.type === "homeStart" ? "Start from home" : "Return home"}</span>
                             <p className="text-sm font-mono font-medium">{item.postcode}</p>
+                            {leaveByTime && (
+                              <p className="text-xs text-primary font-semibold mt-0.5">⏰ Leave by {leaveByTime}</p>
+                            )}
                           </div>
                         </div>
                       );
@@ -759,6 +1019,8 @@ export default function ChainPlanner() {
                           legIndex={item.legIndex}
                           label={item.label}
                           onSelectOption={handleSelectOption}
+                          onEditLeg={handleEditLeg}
+                          onDeleteLeg={handleDeleteLeg}
                         />
                       );
                     }
@@ -777,6 +1039,67 @@ export default function ChainPlanner() {
                     Set your home postcode in Settings to see home travel legs
                   </div>
                 )}
+
+                {/* Add custom leg */}
+                <div className="mt-3">
+                  {!showAddLeg ? (
+                    <button
+                      onClick={() => setShowAddLeg(true)}
+                      className="w-full flex items-center justify-center gap-1.5 text-xs text-muted-foreground hover:text-foreground border border-dashed border-border rounded-lg py-2 transition-colors hover:border-border/80"
+                    >
+                      <Plus size={12} /> Add custom leg
+                    </button>
+                  ) : (
+                    <div className="bg-secondary/60 border border-primary/30 rounded-xl p-3 space-y-2 animate-in fade-in duration-150">
+                      <p className="text-xs font-semibold text-primary">Add a leg</p>
+                      <div className="grid grid-cols-2 gap-2">
+                        <div>
+                          <label className="text-[10px] text-muted-foreground">From postcode</label>
+                          <Input value={addLegFrom} onChange={e => setAddLegFrom(e.target.value.toUpperCase())} placeholder="e.g. BS34 6FE" className="mt-0.5 h-8 text-xs font-mono uppercase" />
+                        </div>
+                        <div>
+                          <label className="text-[10px] text-muted-foreground">To postcode</label>
+                          <Input value={addLegTo} onChange={e => setAddLegTo(e.target.value.toUpperCase())} placeholder="e.g. BS20 7XJ" className="mt-0.5 h-8 text-xs font-mono uppercase" />
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-3 gap-2">
+                        <div>
+                          <label className="text-[10px] text-muted-foreground">Mode</label>
+                          <select value={addLegMode} onChange={e => setAddLegMode(e.target.value)} className="w-full mt-0.5 text-xs bg-background border border-border rounded-md px-2 py-1.5 text-foreground">
+                            {["Train", "Bus", "Taxi", "Walk", "Scooter", "Tube", "Tram", "Ferry"].map(m => <option key={m} value={m}>{m}</option>)}
+                          </select>
+                        </div>
+                        <div>
+                          <label className="text-[10px] text-muted-foreground">Cost (£)</label>
+                          <Input type="number" step="0.10" min="0" value={addLegCost} onChange={e => setAddLegCost(e.target.value)} className="mt-0.5 h-8 text-xs font-mono" />
+                        </div>
+                        <div>
+                          <label className="text-[10px] text-muted-foreground">Duration (min)</label>
+                          <Input type="number" min="1" value={addLegDuration} onChange={e => setAddLegDuration(e.target.value)} className="mt-0.5 h-8 text-xs font-mono" />
+                        </div>
+                      </div>
+                      <div className="flex gap-2">
+                        <Button size="sm" className="flex-1 h-7 text-xs" onClick={handleAddLeg}>Add Leg</Button>
+                        <Button size="sm" variant="outline" className="flex-1 h-7 text-xs" onClick={() => setShowAddLeg(false)}>Cancel</Button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Route Map card */}
+            <Card className="bg-card border-border">
+              <CardHeader className="pb-2">
+                <div className="flex items-center justify-between">
+                  <CardTitle className="text-sm font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-2">
+                    <MapIcon size={14} /> Day Route Map
+                  </CardTitle>
+                </div>
+              </CardHeader>
+              <CardContent className="pb-3">
+                <ChainRouteMap jobs={chainResult.jobs} homePostcode={chainResult.homePostcode} />
+                <p className="text-[10px] text-muted-foreground mt-2 text-center">All drive legs plotted — tap markers for details</p>
               </CardContent>
             </Card>
 

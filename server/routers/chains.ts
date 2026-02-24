@@ -164,7 +164,7 @@ async function getRealTransitOptions(
 
     if (result.status !== "OK" || !result.routes?.length) {
       console.warn("[Chains] Google Maps transit returned:", result.status, "for", fromPostcode, "→", toPostcode);
-      return getFallbackOptions(fromPostcode, toPostcode);
+      return getFallbackOptions(fromPostcode, toPostcode, departureTimestamp);
     }
 
     for (const route of result.routes.slice(0, 3)) {
@@ -309,28 +309,36 @@ async function getRealTransitOptions(
       }
     }
 
-    return options.length ? options : getFallbackOptions(fromPostcode, toPostcode);
+    return options.length ? options : getFallbackOptions(fromPostcode, toPostcode, departureTimestamp);
   } catch (err) {
     console.error("[Chains] Google Maps transit error:", err);
-    return getFallbackOptions(fromPostcode, toPostcode);
+    return getFallbackOptions(fromPostcode, toPostcode, departureTimestamp);
   }
 }
 
-function getFallbackOptions(fromPostcode: string, toPostcode: string): TransitOption[] {
+function fmtTime(unixSecs: number): string {
+  return new Date(unixSecs * 1000).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", hour12: false });
+}
+
+function getFallbackOptions(fromPostcode: string, toPostcode: string, departureTimestamp?: number): TransitOption[] {
   const seed = (fromPostcode.charCodeAt(0) + toPostcode.charCodeAt(0)) % 3;
+  const depSecs = departureTimestamp ?? Math.floor(Date.now() / 1000) + 1800;
+  const trainMins = 35 + seed * 10;
+  const busMins = 55 + seed * 15;
+  const taxiMins = 20 + seed * 5;
   return [
     {
       mode: "Train",
-      durationMins: 35 + seed * 10,
+      durationMins: trainMins,
       cost: 8.50 + seed * 4,
       operator: "National Rail",
       changes: seed,
-      departureTime: `${8 + seed}:${seed === 0 ? "00" : seed === 1 ? "15" : "30"}`,
-      arrivalTime: `${9 + seed}:${seed === 0 ? "05" : seed === 1 ? "22" : "45"}`,
+      departureTime: fmtTime(depSecs),
+      arrivalTime: fmtTime(depSecs + trainMins * 60),
       steps: [{
         mode: "TRAIN",
         instruction: `Train from ${fromPostcode} to ${toPostcode}`,
-        durationMins: 35 + seed * 10,
+        durationMins: trainMins,
         distanceMetres: 50000,
         operator: "National Rail",
       }],
@@ -338,33 +346,33 @@ function getFallbackOptions(fromPostcode: string, toPostcode: string): TransitOp
     },
     {
       mode: "Bus",
-      durationMins: 55 + seed * 15,
-      cost: 3.50 + seed,
-      operator: "National Express",
+      durationMins: busMins,
+      cost: 2.0,
+      operator: "Local Bus",
       changes: 1,
-      departureTime: `${8 + seed}:00`,
-      arrivalTime: `${9 + seed}:${seed === 0 ? "10" : "25"}`,
+      departureTime: fmtTime(depSecs),
+      arrivalTime: fmtTime(depSecs + busMins * 60),
       steps: [{
         mode: "BUS",
         instruction: `Bus from ${fromPostcode} to ${toPostcode}`,
-        durationMins: 55 + seed * 15,
+        durationMins: busMins,
         distanceMetres: 40000,
-        operator: "National Express",
+        operator: "Local Bus",
       }],
       summary: "Bus",
     },
     {
       mode: "Taxi",
-      durationMins: 20 + seed * 5,
+      durationMins: taxiMins,
       cost: 18 + seed * 6,
       operator: "Local Taxi",
       changes: 0,
       departureTime: "On demand",
-      arrivalTime: "On demand",
+      arrivalTime: fmtTime(depSecs + taxiMins * 60),
       steps: [{
         mode: "OTHER",
         instruction: `Taxi from ${fromPostcode} to ${toPostcode}`,
-        durationMins: 20 + seed * 5,
+        durationMins: taxiMins,
         distanceMetres: 20000,
       }],
       summary: "Taxi",
@@ -432,19 +440,18 @@ export const chainsRouter = router({
       const s = settingsRows[0];
       const homePostcode = s?.homePostcode ?? "";
 
-      // Determine departure time for first leg
-      // If first job has a scheduled pickup time, work backwards from it
-      const firstJob = orderedJobs[0]!;
-      let depTimestamp = input.departureTimestamp;
-      if (!depTimestamp && firstJob.scheduledPickupAt) {
-        // Leave 30 mins before scheduled pickup as a starting point
-        depTimestamp = Math.floor(new Date(firstJob.scheduledPickupAt).getTime() / 1000) - 1800;
-      }
-      if (!depTimestamp) {
-        depTimestamp = Math.floor(Date.now() / 1000) + 1800;
-      }
+      // ----------------------------------------------------------------
+      // Sequential timing: compute each leg's departure time based on the
+      // ACTUAL completion time of the previous leg (drive + transit).
+      //
+      // Timeline for a 2-job chain:
+      //   homeDepTime  → [home→pickup1 transit]
+      //   pickup1Time  → [drive job1: pickup1 → dropoff1]
+      //   dropoff1Time → [reposition: dropoff1 → pickup2 transit]
+      //   pickup2Time  → [drive job2: pickup2 → dropoff2]
+      //   dropoff2Time → [home return transit]
+      // ----------------------------------------------------------------
 
-      // --- Fetch real transit options for each transport leg in parallel ---
       type TransportLeg = {
         fromPostcode: string;
         toPostcode: string;
@@ -452,67 +459,118 @@ export const chainsRouter = router({
         options: TransitOption[];
         selectedOptionIndex: number;
         noTransitZone: boolean;
+        // Wall-clock departure time (Unix seconds) for this leg
+        departureTimestampSecs: number;
       };
 
-      const transportLegPromises: Promise<TransportLeg>[] = [];
+      const firstJob = orderedJobs[0]!;
 
-      // Leg 0: home → first pickup
+      // Determine the wall-clock time the driver must be at pickup1
+      // If the first job has a scheduled pickup time, use that.
+      // Otherwise default to now + 2 hours.
+      let pickup1TimeSecs: number;
+      if (firstJob.scheduledPickupAt) {
+        pickup1TimeSecs = Math.floor(new Date(firstJob.scheduledPickupAt).getTime() / 1000);
+      } else if (input.departureTimestamp) {
+        // If caller supplied a departure time, treat it as home departure
+        // We'll adjust after computing home→pickup transit duration
+        pickup1TimeSecs = input.departureTimestamp + 3600; // rough estimate
+      } else {
+        pickup1TimeSecs = Math.floor(Date.now() / 1000) + 7200;
+      }
+
+      // Build legs SEQUENTIALLY so each departure time is accurate
+      const transportLegs: TransportLeg[] = [];
+
+      // ---- Leg 0: home → first pickup ----
       if (homePostcode) {
-        transportLegPromises.push(
-          getRealTransitOptions(homePostcode, orderedJobs[0]!.pickupPostcode, depTimestamp)
-            .then(options => ({
-              fromPostcode: homePostcode,
-              toPostcode: orderedJobs[0]!.pickupPostcode,
-              legType: "homeToPickup" as const,
-              options,
-              selectedOptionIndex: 0,
-              noTransitZone: options.length === 1 && options[0]?.mode === "Taxi",
-            }))
+        // Work backwards: we need to arrive at pickup1 by pickup1TimeSecs
+        // Request transit departing ~60 mins before pickup (Google will find best match)
+        const homeDepSecs = pickup1TimeSecs - 3600;
+        const options = await getRealTransitOptions(
+          homePostcode,
+          orderedJobs[0]!.pickupPostcode,
+          homeDepSecs
         );
+        // Pick the option that gets us there on time (shortest duration that fits)
+        const bestOpt = options[0];
+        const actualTransitMins = bestOpt?.durationMins ?? 60;
+        // Recalculate actual home departure so we arrive just in time
+        const actualHomeDepSecs = pickup1TimeSecs - (actualTransitMins * 60);
+        transportLegs.push({
+          fromPostcode: homePostcode,
+          toPostcode: orderedJobs[0]!.pickupPostcode,
+          legType: "homeToPickup",
+          options,
+          selectedOptionIndex: 0,
+          noTransitZone: options.length === 1 && options[0]?.mode === "Taxi",
+          departureTimestampSecs: actualHomeDepSecs,
+        });
       }
 
-      // Reposition legs: dropoff[i] → pickup[i+1]
-      // Estimate departure time based on drive duration of previous job
-      let runningTime = depTimestamp;
+      // ---- Reposition legs: dropoff[i] → pickup[i+1] ----
+      // Track the running wall-clock time as we go through the chain
+      let currentTimeSecs = pickup1TimeSecs;
+
       for (let i = 0; i < orderedJobs.length - 1; i++) {
-        const from = orderedJobs[i]!;
-        const to = orderedJobs[i + 1]!;
-        // Add drive duration of this job to get estimated arrival at dropoff
-        runningTime += (Number(from.estimatedDurationMins ?? 60) * 60);
-        const repDepTime = runningTime;
-        transportLegPromises.push(
-          getRealTransitOptions(from.dropoffPostcode, to.pickupPostcode, repDepTime)
-            .then(options => ({
-              fromPostcode: from.dropoffPostcode,
-              toPostcode: to.pickupPostcode,
-              legType: "reposition" as const,
-              options,
-              selectedOptionIndex: 0,
-              noTransitZone: options.length === 1 && options[0]?.mode === "Taxi",
-            }))
+        const fromJob = orderedJobs[i]!;
+        const toJob = orderedJobs[i + 1]!;
+
+        // Drive job i: starts at currentTimeSecs, ends after drive duration
+        const driveMins = Number(fromJob.estimatedDurationMins ?? 60);
+        const dropoffTimeSecs = currentTimeSecs + (driveMins * 60);
+
+        // Reposition departs from dropoff time
+        const repDepSecs = dropoffTimeSecs;
+        const options = await getRealTransitOptions(
+          fromJob.dropoffPostcode,
+          toJob.pickupPostcode,
+          repDepSecs
         );
-        // Add reposition time (use first option duration as estimate)
-        runningTime += 60 * 60; // 1hr estimate for reposition
+
+        const bestOpt = options[0];
+        const repMins = bestOpt?.durationMins ?? 60;
+
+        // If toJob has a scheduled pickup time, check if we'll make it
+        const nextPickupSecs = toJob.scheduledPickupAt
+          ? Math.floor(new Date(toJob.scheduledPickupAt).getTime() / 1000)
+          : repDepSecs + (repMins * 60);
+
+        transportLegs.push({
+          fromPostcode: fromJob.dropoffPostcode,
+          toPostcode: toJob.pickupPostcode,
+          legType: "reposition",
+          options,
+          selectedOptionIndex: 0,
+          noTransitZone: options.length === 1 && options[0]?.mode === "Taxi",
+          departureTimestampSecs: repDepSecs,
+        });
+
+        // Advance clock to the next pickup time
+        currentTimeSecs = nextPickupSecs;
       }
 
-      // Last leg: last dropoff → home
+      // ---- Last leg: last dropoff → home ----
       if (homePostcode) {
         const lastJob = orderedJobs[orderedJobs.length - 1]!;
-        runningTime += (Number(lastJob.estimatedDurationMins ?? 60) * 60);
-        transportLegPromises.push(
-          getRealTransitOptions(lastJob.dropoffPostcode, homePostcode, runningTime)
-            .then(options => ({
-              fromPostcode: lastJob.dropoffPostcode,
-              toPostcode: homePostcode,
-              legType: "homeReturn" as const,
-              options,
-              selectedOptionIndex: 0,
-              noTransitZone: options.length === 1 && options[0]?.mode === "Taxi",
-            }))
-        );
-      }
+        const lastDriveMins = Number(lastJob.estimatedDurationMins ?? 60);
+        const lastDropoffSecs = currentTimeSecs + (lastDriveMins * 60);
 
-      const transportLegs = await Promise.all(transportLegPromises);
+        const options = await getRealTransitOptions(
+          lastJob.dropoffPostcode,
+          homePostcode,
+          lastDropoffSecs
+        );
+        transportLegs.push({
+          fromPostcode: lastJob.dropoffPostcode,
+          toPostcode: homePostcode,
+          legType: "homeReturn",
+          options,
+          selectedOptionIndex: 0,
+          noTransitZone: options.length === 1 && options[0]?.mode === "Taxi",
+          departureTimestampSecs: lastDropoffSecs,
+        });
+      }
 
       // Apply any user-selected option indices
       if (input.legSelections) {

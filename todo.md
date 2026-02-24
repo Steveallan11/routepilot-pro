@@ -247,3 +247,22 @@
 - [x] UI: receipt gallery in job detail sheet showing all scanned receipts with delete
 - [x] UI: receipt scan result preview with apply-as selector (Travel to Job / Travel Home / Fuel)
 - [x] UI: job cost breakdown shows actual vs estimated with strikethrough when receipt applied
+
+## Fix: Chain Planner Sequential Timing
+- [x] Server: calculate reposition departure time = pickup time + drive duration (sequential, not hardcoded "now")
+- [x] Server: propagate all leg times sequentially through the chain
+- [x] Server: pass departure_time to Google Maps transit API based on actual computed departure
+- [x] Server: fallback options use real departure time (not hardcoded 8:00)
+- [x] UI: all leg times reflect real sequential flow (drive ends → reposition starts → next pickup)
+- [x] UI: "Leave by" time shown on home start node
+
+## Feature: Editable Chain Legs
+- [x] UI: edit cost, transport type, and duration inline on each transport leg card
+- [x] UI: add a new custom leg (manual postcode, mode, cost, duration)
+- [x] UI: delete any leg from the chain
+- [x] UI: summary recalculates instantly when any leg is edited/deleted/added
+
+## Feature: Full-Day Route Map on Saved Chain
+- [x] UI: show Google Map with all drive legs plotted in chain result section
+- [x] UI: DirectionsService plots all waypoints (home → pickup1 → dropoff1 → pickup2 → dropoff2 → home)
+- [x] UI: map auto-fits bounds to show all legs
