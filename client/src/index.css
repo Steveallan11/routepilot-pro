@@ -1,5 +1,6 @@
 @import "tailwindcss";
 @import "tw-animate-css";
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap");
 
 @custom-variant dark (&:is(.dark *));
 
@@ -43,82 +44,62 @@
 }
 
 :root {
-  --primary: var(--color-blue-700);
-  --primary-foreground: var(--color-blue-50);
-  --sidebar-primary: var(--color-blue-600);
-  --sidebar-primary-foreground: var(--color-blue-50);
-  --chart-1: var(--color-blue-300);
-  --chart-2: var(--color-blue-500);
-  --chart-3: var(--color-blue-600);
-  --chart-4: var(--color-blue-700);
-  --chart-5: var(--color-blue-800);
-  --radius: 0.65rem;
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.235 0.015 65);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.235 0.015 65);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.235 0.015 65);
-  --secondary: oklch(0.98 0.001 286.375);
-  --secondary-foreground: oklch(0.4 0.015 65);
-  --muted: oklch(0.967 0.001 286.375);
-  --muted-foreground: oklch(0.552 0.016 285.938);
-  --accent: oklch(0.967 0.001 286.375);
-  --accent-foreground: oklch(0.141 0.005 285.823);
-  --destructive: oklch(0.577 0.245 27.325);
-  --destructive-foreground: oklch(0.985 0 0);
-  --border: oklch(0.92 0.004 286.32);
-  --input: oklch(0.92 0.004 286.32);
-  --ring: oklch(0.623 0.214 259.815);
-  --sidebar: oklch(0.985 0 0);
-  --sidebar-foreground: oklch(0.235 0.015 65);
-  --sidebar-accent: oklch(0.967 0.001 286.375);
-  --sidebar-accent-foreground: oklch(0.141 0.005 285.823);
-  --sidebar-border: oklch(0.92 0.004 286.32);
-  --sidebar-ring: oklch(0.623 0.214 259.815);
+  /* RoutePilot Pro — Dark-first design (deep navy + electric green) */
+  --radius: 0.75rem;
+  --background: oklch(0.13 0.015 240);
+  --foreground: oklch(0.96 0.005 240);
+  --card: oklch(0.17 0.018 240);
+  --card-foreground: oklch(0.96 0.005 240);
+  --popover: oklch(0.17 0.018 240);
+  --popover-foreground: oklch(0.96 0.005 240);
+  --primary: oklch(0.82 0.22 142);
+  --primary-foreground: oklch(0.13 0.015 240);
+  --secondary: oklch(0.22 0.02 240);
+  --secondary-foreground: oklch(0.85 0.01 240);
+  --muted: oklch(0.22 0.02 240);
+  --muted-foreground: oklch(0.55 0.01 240);
+  --accent: oklch(0.82 0.22 142);
+  --accent-foreground: oklch(0.13 0.015 240);
+  --destructive: oklch(0.62 0.22 25);
+  --destructive-foreground: oklch(0.98 0.005 25);
+  --border: oklch(0.28 0.02 240);
+  --input: oklch(0.22 0.02 240);
+  --ring: oklch(0.82 0.22 142);
+  --chart-1: oklch(0.82 0.22 142);
+  --chart-2: oklch(0.72 0.18 200);
+  --chart-3: oklch(0.78 0.18 65);
+  --chart-4: oklch(0.62 0.22 25);
+  --chart-5: oklch(0.65 0.15 280);
+  --sidebar: oklch(0.17 0.018 240);
+  --sidebar-foreground: oklch(0.96 0.005 240);
+  --sidebar-primary: oklch(0.82 0.22 142);
+  --sidebar-primary-foreground: oklch(0.13 0.015 240);
+  --sidebar-accent: oklch(0.22 0.02 240);
+  --sidebar-accent-foreground: oklch(0.85 0.01 240);
+  --sidebar-border: oklch(0.28 0.02 240);
+  --sidebar-ring: oklch(0.82 0.22 142);
 }
 
 .dark {
-  --primary: var(--color-blue-700);
-  --primary-foreground: var(--color-blue-50);
-  --sidebar-primary: var(--color-blue-500);
-  --sidebar-primary-foreground: var(--color-blue-50);
-  --background: oklch(0.141 0.005 285.823);
-  --foreground: oklch(0.85 0.005 65);
-  --card: oklch(0.21 0.006 285.885);
-  --card-foreground: oklch(0.85 0.005 65);
-  --popover: oklch(0.21 0.006 285.885);
-  --popover-foreground: oklch(0.85 0.005 65);
-  --secondary: oklch(0.24 0.006 286.033);
-  --secondary-foreground: oklch(0.7 0.005 65);
-  --muted: oklch(0.274 0.006 286.033);
-  --muted-foreground: oklch(0.705 0.015 286.067);
-  --accent: oklch(0.274 0.006 286.033);
-  --accent-foreground:  oklch(0.92 0.005 65);
-  --destructive: oklch(0.704 0.191 22.216);
-  --destructive-foreground: oklch(0.985 0 0);
-  --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.488 0.243 264.376);
-  --chart-1: var(--color-blue-300);
-  --chart-2: var(--color-blue-500);
-  --chart-3: var(--color-blue-600);
-  --chart-4: var(--color-blue-700);
-  --chart-5: var(--color-blue-800);
-  --sidebar: oklch(0.21 0.006 285.885);
-  --sidebar-foreground: oklch(0.85 0.005 65);
-  --sidebar-accent: oklch(0.274 0.006 286.033);
-  --sidebar-accent-foreground:  oklch(0.985 0 0);
-  --sidebar-border: oklch(1 0 0 / 10%);
-  --sidebar-ring: oklch(0.488 0.243 264.376);
+  /* Same as :root — dark is the default theme */
+  --background: oklch(0.13 0.015 240);
+  --foreground: oklch(0.96 0.005 240);
 }
 
 @layer base {
   * {
     @apply border-border outline-ring/50;
+    box-sizing: border-box;
+  }
+  html {
+    -webkit-tap-highlight-color: transparent;
+    scroll-behavior: smooth;
   }
   body {
-    @apply bg-background text-foreground;
+    @apply bg-background text-foreground font-sans antialiased;
+    min-height: 100dvh;
+    overscroll-behavior: none;
+    font-family: 'Inter', system-ui, sans-serif;
   }
   button:not(:disabled),
   [role="button"]:not([aria-disabled="true"]),
@@ -169,9 +150,60 @@
 
   @media (min-width: 1024px) {
     .container {
-      padding-left: 2rem; /* 32px - desktop padding */
+      padding-left: 2rem;
       padding-right: 2rem;
-      max-width: 1280px; /* Standard content width */
+      max-width: 1280px;
     }
   }
+
+  /* Traffic light profit badges */
+  .badge-green {
+    background: oklch(0.72 0.2 142 / 0.15);
+    color: oklch(0.82 0.22 142);
+    border: 1px solid oklch(0.72 0.2 142 / 0.3);
+  }
+  .badge-amber {
+    background: oklch(0.78 0.18 65 / 0.15);
+    color: oklch(0.88 0.18 65);
+    border: 1px solid oklch(0.78 0.18 65 / 0.3);
+  }
+  .badge-red {
+    background: oklch(0.62 0.22 25 / 0.15);
+    color: oklch(0.72 0.22 25);
+    border: 1px solid oklch(0.62 0.22 25 / 0.3);
+  }
+
+  /* Card hover */
+  .card-hover {
+    transition: all 0.2s ease;
+  }
+  .card-hover:hover {
+    border-color: oklch(0.82 0.22 142 / 0.4);
+    box-shadow: 0 8px 24px oklch(0.82 0.22 142 / 0.06);
+  }
+
+  /* Gradient text */
+  .gradient-text {
+    background: linear-gradient(135deg, oklch(0.82 0.22 142), oklch(0.72 0.2 200));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  /* Profit glow */
+  .profit-glow {
+    text-shadow: 0 0 20px oklch(0.82 0.22 142 / 0.4);
+  }
+
+  /* Scrollbar */
+  ::-webkit-scrollbar { width: 4px; height: 4px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: oklch(0.35 0.02 240); border-radius: 2px; }
+
+  /* Pulse for live data */
+  @keyframes pulse-green {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.5; }
+  }
+  .pulse-green { animation: pulse-green 2s ease-in-out infinite; }
 }
