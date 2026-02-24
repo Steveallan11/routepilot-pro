@@ -15,6 +15,16 @@ const jobInputSchema = z.object({
   brokerFeeFixed: z.number().min(0).default(0),
   fuelReimbursed: z.boolean().default(false),
   scheduledPickupAt: z.string().optional(),
+  // Booking metadata (from AI scan or manual entry)
+  brokerName: z.string().max(100).optional(),
+  jobReference: z.string().max(100).optional(),
+  pickupAddress: z.string().optional(),
+  dropoffAddress: z.string().optional(),
+  bookingImageUrl: z.string().url().optional(),
+  notes: z.string().optional(),
+  // Pre-calculated distance/duration from scan (override Maps API)
+  scannedDistanceMiles: z.number().optional(),
+  scannedDurationMins: z.number().optional(),
 });
 
 async function getUserSettings(userId: number) {
@@ -170,6 +180,13 @@ export const jobsRouter = router({
         worthItScore: breakdown.worthItScore,
         scheduledPickupAt: input.scheduledPickupAt ? new Date(input.scheduledPickupAt) : undefined,
         routeData: routeInfo?.routeData ?? null,
+        // Booking metadata
+        brokerName: input.brokerName ?? null,
+        jobReference: input.jobReference ?? null,
+        pickupAddress: input.pickupAddress ?? null,
+        dropoffAddress: input.dropoffAddress ?? null,
+        bookingImageUrl: input.bookingImageUrl ?? null,
+        notes: input.notes ?? null,
       });
 
       return { success: true, breakdown, distanceMiles, durationMins };

@@ -14,7 +14,7 @@ import { getLoginUrl } from "@/const";
 import {
   Car, MapPin, PoundSterling, Fuel, Clock, TrendingUp,
   ChevronDown, ChevronUp, Save, Zap, Camera, X, CheckCircle2,
-  AlertCircle, Loader2, Sparkles
+  AlertCircle, Loader2, Sparkles, Building2, Hash, Route, FileText
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { calculateJobCost } from "../../../shared/routepilot-types";
@@ -84,6 +84,7 @@ interface ScanResult {
   scheduledDate: string;
   jobReference: string;
   confidence: number;
+  imageUrl?: string;
 }
 
 export default function Home() {
@@ -97,6 +98,9 @@ export default function Home() {
   } | null>(null);
   const [scanState, setScanState] = useState<ScanState>({ status: "idle" });
   const [previewImageUrl, setPreviewImageUrl] = useState<string | null>(null);
+  // Store the full scan data for saving alongside the job
+  const [savedScanData, setSavedScanData] = useState<ScanResult | null>(null);
+  const [uploadedImageUrl, setUploadedImageUrl] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const { data: settings } = trpc.settings.get.useQuery(undefined, { enabled: isAuthenticated });
@@ -148,7 +152,6 @@ export default function Home() {
         const reader = new FileReader();
         reader.onload = () => {
           const result = reader.result as string;
-          // Strip the data URL prefix (e.g. "data:image/jpeg;base64,")
           resolve(result.split(",")[1] ?? "");
         };
         reader.onerror = reject;
@@ -160,11 +163,12 @@ export default function Home() {
         base64Data,
         mimeType: file.type,
       });
+      setUploadedImageUrl(imageUrl);
 
       setScanState({ status: "extracting" });
       const extracted = await extractBookingMutation.mutateAsync({ imageUrl });
 
-      setScanState({ status: "preview", data: extracted });
+      setScanState({ status: "preview", data: { ...extracted, imageUrl } });
     } catch (err) {
       const message = err instanceof Error ? err.message : "Scan failed. Please try again.";
       setScanState({ status: "error", message });
@@ -172,7 +176,7 @@ export default function Home() {
     }
   };
 
-  // Apply scanned data to form
+  // Apply scanned data to form and store it for saving
   const applyScannedData = (data: ScanResult) => {
     setForm(prev => ({
       ...prev,
@@ -181,6 +185,8 @@ export default function Home() {
       deliveryFee: data.deliveryFee > 0 ? data.deliveryFee.toString() : prev.deliveryFee,
       fuelDeposit: data.fuelDeposit > 0 ? data.fuelDeposit.toString() : prev.fuelDeposit,
     }));
+    // Keep the full scan data so we can persist it when saving
+    setSavedScanData(data);
     setScanState({ status: "idle" });
     setPreviewImageUrl(null);
     setResult(null);
@@ -226,7 +232,10 @@ export default function Home() {
       window.location.href = getLoginUrl();
       return;
     }
-    if (!result) return;
+    if (!result) {
+      toast.error("Please calculate the job first");
+      return;
+    }
 
     try {
       await createJobMutation.mutateAsync({
@@ -236,10 +245,22 @@ export default function Home() {
         fuelDeposit: parseFloat(form.fuelDeposit) || 0,
         brokerFeePercent: parseFloat(form.brokerFeePercent) || 0,
         fuelReimbursed: form.fuelReimbursed,
+        // Pass all scan metadata so it's fully logged
+        brokerName: savedScanData?.brokerName || undefined,
+        jobReference: savedScanData?.jobReference || undefined,
+        pickupAddress: savedScanData?.pickupAddress || undefined,
+        dropoffAddress: savedScanData?.dropoffAddress || undefined,
+        bookingImageUrl: savedScanData?.imageUrl || uploadedImageUrl || undefined,
+        scheduledPickupAt: savedScanData?.scheduledDate || undefined,
+        scannedDistanceMiles: savedScanData?.distanceMiles || undefined,
+        scannedDurationMins: savedScanData?.durationMins || undefined,
       });
       toast.success("Job saved to history!");
+      // Clear scan data after successful save
+      setSavedScanData(null);
+      setUploadedImageUrl(null);
     } catch {
-      toast.error("Failed to save job");
+      toast.error("Failed to save job. Please try again.");
     }
   };
 
@@ -250,7 +271,7 @@ export default function Home() {
 
   return (
     <div className="pb-24 pt-4">
-      {/* Hidden file input */}
+      {/* Hidden file input — no capture attribute so users get full gallery/files/camera choice */}
       <input
         ref={fileInputRef}
         type="file"
@@ -296,7 +317,7 @@ export default function Home() {
           <div className="flex items-center gap-1.5 mt-2">
             <div className="w-1.5 h-1.5 rounded-full bg-primary pulse-green" />
             <span className="text-xs text-muted-foreground">
-              Live fuel: <span className="text-foreground font-medium">{fuelData.petrolPencePerLitre.toFixed(1)}p/L petrol</span>
+              Live fuel: <span className="text-primary font-medium">{fuelData.petrolPencePerLitre.toFixed(1)}p/L petrol</span>
               {" · "}{fuelData.dieselPencePerLitre.toFixed(1)}p/L diesel
             </span>
           </div>
@@ -304,6 +325,28 @@ export default function Home() {
       </div>
 
       <div className="px-4 space-y-4">
+
+        {/* Saved scan badge — shows when scan data is attached to the current job */}
+        {savedScanData && (
+          <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-primary/10 border border-primary/30 animate-in fade-in duration-200">
+            <Sparkles size={13} className="text-primary flex-shrink-0" />
+            <div className="flex-1 min-w-0">
+              <span className="text-xs font-medium text-primary">Booking scanned</span>
+              {savedScanData.brokerName && (
+                <span className="text-xs text-muted-foreground ml-1.5">· {savedScanData.brokerName}</span>
+              )}
+              {savedScanData.jobReference && (
+                <span className="text-xs text-muted-foreground ml-1.5">· {savedScanData.jobReference}</span>
+              )}
+            </div>
+            <button
+              onClick={() => setSavedScanData(null)}
+              className="text-muted-foreground hover:text-foreground flex-shrink-0"
+            >
+              <X size={13} />
+            </button>
+          </div>
+        )}
 
         {/* AI Scan Preview Card */}
         {(isScanning || scanState.status === "preview" || scanState.status === "error") && (
@@ -358,10 +401,16 @@ export default function Home() {
                   )}
                   <div className="flex-1 space-y-1.5 min-w-0">
                     {scanState.data.brokerName && (
-                      <div className="flex items-center gap-1.5">
-                        <Badge variant="secondary" className="text-xs">{scanState.data.brokerName}</Badge>
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <Badge variant="secondary" className="text-xs flex items-center gap-1">
+                          <Building2 size={10} />
+                          {scanState.data.brokerName}
+                        </Badge>
                         {scanState.data.jobReference && (
-                          <span className="text-xs text-muted-foreground truncate">{scanState.data.jobReference}</span>
+                          <span className="text-xs text-muted-foreground flex items-center gap-0.5">
+                            <Hash size={10} />
+                            {scanState.data.jobReference}
+                          </span>
                         )}
                       </div>
                     )}
@@ -390,9 +439,38 @@ export default function Home() {
                           <span className="font-mono font-semibold text-foreground">{scanState.data.distanceMiles} mi</span>
                         </div>
                       )}
+                      {scanState.data.durationMins > 0 && (
+                        <div>
+                          <span className="text-muted-foreground">Duration: </span>
+                          <span className="font-mono font-semibold text-foreground">
+                            {Math.floor(scanState.data.durationMins / 60)}h {Math.round(scanState.data.durationMins % 60)}m
+                          </span>
+                        </div>
+                      )}
+                      {scanState.data.fuelDeposit > 0 && (
+                        <div>
+                          <span className="text-muted-foreground">Fuel dep: </span>
+                          <span className="font-mono font-semibold text-foreground">£{scanState.data.fuelDeposit.toFixed(2)}</span>
+                        </div>
+                      )}
                     </div>
                     {scanState.data.pickupAddress && (
-                      <p className="text-xs text-muted-foreground truncate">{scanState.data.pickupAddress}</p>
+                      <p className="text-xs text-muted-foreground truncate">
+                        <span className="text-muted-foreground/60">↑ </span>{scanState.data.pickupAddress}
+                      </p>
+                    )}
+                    {scanState.data.dropoffAddress && (
+                      <p className="text-xs text-muted-foreground truncate">
+                        <span className="text-muted-foreground/60">↓ </span>{scanState.data.dropoffAddress}
+                      </p>
+                    )}
+                    {scanState.data.scheduledDate && (
+                      <p className="text-xs text-muted-foreground">
+                        <span className="text-muted-foreground/60">📅 </span>
+                        {new Date(scanState.data.scheduledDate).toLocaleString("en-GB", {
+                          day: "numeric", month: "short", hour: "2-digit", minute: "2-digit"
+                        })}
+                      </p>
                     )}
                     {/* Confidence indicator */}
                     <div className="flex items-center gap-1.5 mt-1">
@@ -728,15 +806,118 @@ export default function Home() {
               </CardContent>
             </Card>
 
+            {/* Job Sheet — shows all booking metadata if available */}
+            {savedScanData && (
+              <Card className="bg-card border-border">
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-sm font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-2">
+                    <FileText size={13} />
+                    Job Sheet
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-2.5">
+                  {savedScanData.brokerName && (
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="flex items-center gap-1.5 text-muted-foreground">
+                        <Building2 size={13} /> Broker
+                      </span>
+                      <span className="font-medium text-foreground">{savedScanData.brokerName}</span>
+                    </div>
+                  )}
+                  {savedScanData.jobReference && (
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="flex items-center gap-1.5 text-muted-foreground">
+                        <Hash size={13} /> Reference
+                      </span>
+                      <span className="font-mono text-xs text-foreground">{savedScanData.jobReference}</span>
+                    </div>
+                  )}
+                  {savedScanData.scheduledDate && (
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="text-muted-foreground">Scheduled</span>
+                      <span className="text-foreground text-xs">
+                        {new Date(savedScanData.scheduledDate).toLocaleString("en-GB", {
+                          weekday: "short", day: "numeric", month: "short",
+                          hour: "2-digit", minute: "2-digit"
+                        })}
+                      </span>
+                    </div>
+                  )}
+                  {(savedScanData.pickupAddress || savedScanData.dropoffAddress) && (
+                    <Separator className="my-1" />
+                  )}
+                  {savedScanData.pickupAddress && (
+                    <div className="text-sm">
+                      <span className="text-muted-foreground text-xs block mb-0.5 flex items-center gap-1">
+                        <MapPin size={11} className="text-muted-foreground" /> Pickup address
+                      </span>
+                      <span className="text-foreground text-xs leading-relaxed">{savedScanData.pickupAddress}</span>
+                    </div>
+                  )}
+                  {savedScanData.dropoffAddress && (
+                    <div className="text-sm">
+                      <span className="text-muted-foreground text-xs block mb-0.5 flex items-center gap-1">
+                        <MapPin size={11} className="text-primary" /> Dropoff address
+                      </span>
+                      <span className="text-foreground text-xs leading-relaxed">{savedScanData.dropoffAddress}</span>
+                    </div>
+                  )}
+                  {(savedScanData.distanceMiles > 0 || savedScanData.durationMins > 0) && (
+                    <>
+                      <Separator className="my-1" />
+                      <div className="grid grid-cols-2 gap-3">
+                        {savedScanData.distanceMiles > 0 && (
+                          <div className="bg-secondary rounded-lg p-2 text-center">
+                            <p className="text-xs text-muted-foreground mb-0.5 flex items-center justify-center gap-1">
+                              <Route size={10} /> Booking dist.
+                            </p>
+                            <p className="text-sm font-bold font-mono text-foreground">{savedScanData.distanceMiles} mi</p>
+                          </div>
+                        )}
+                        {savedScanData.durationMins > 0 && (
+                          <div className="bg-secondary rounded-lg p-2 text-center">
+                            <p className="text-xs text-muted-foreground mb-0.5 flex items-center justify-center gap-1">
+                              <Clock size={10} /> Booking time
+                            </p>
+                            <p className="text-sm font-bold font-mono text-foreground">
+                              {Math.floor(savedScanData.durationMins / 60)}h {Math.round(savedScanData.durationMins % 60)}m
+                            </p>
+                          </div>
+                        )}
+                      </div>
+                    </>
+                  )}
+                  {savedScanData.imageUrl && (
+                    <>
+                      <Separator className="my-1" />
+                      <div className="flex items-center gap-2">
+                        <img
+                          src={previewImageUrl || savedScanData.imageUrl}
+                          alt="Booking screenshot"
+                          className="w-12 h-16 object-cover rounded border border-border"
+                        />
+                        <span className="text-xs text-muted-foreground">Booking screenshot attached</span>
+                      </div>
+                    </>
+                  )}
+                </CardContent>
+              </Card>
+            )}
+
             {/* Save button */}
             <Button
               onClick={handleSaveJob}
               disabled={createJobMutation.isPending}
-              variant="outline"
-              className="w-full border-border hover:border-primary/50 bg-transparent"
+              className={cn(
+                "w-full h-12 text-base font-semibold",
+                savedScanData
+                  ? "bg-primary text-primary-foreground hover:bg-primary/90"
+                  : "bg-transparent border border-border hover:border-primary/50 text-foreground"
+              )}
             >
               <Save size={16} className="mr-2" />
-              {createJobMutation.isPending ? "Saving..." : "Save to Job History"}
+              {createJobMutation.isPending ? "Saving..." :
+               savedScanData ? "Save Job with Booking Details" : "Save to Job History"}
             </Button>
           </div>
         )}

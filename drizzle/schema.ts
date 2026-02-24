@@ -84,6 +84,14 @@ export const jobs = mysqlTable("jobs", {
   actualNetProfit: decimal("actualNetProfit", { precision: 10, scale: 2 }).$type<number>(),
   actualNotes: text("actualNotes"),
 
+  // Broker & booking metadata (from AI scan or manual entry)
+  pickupAddress: text("pickupAddress"),
+  dropoffAddress: text("dropoffAddress"),
+  brokerName: varchar("brokerName", { length: 100 }),
+  jobReference: varchar("jobReference", { length: 100 }),
+  bookingImageUrl: text("bookingImageUrl"),
+  notes: text("notes"),
+
   // Route JSON from Maps API
   routeData: json("routeData"),
 

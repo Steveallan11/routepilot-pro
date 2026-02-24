@@ -1,0 +1,9 @@
+{
+  "query": "\nALTER TABLE jobs\n  ADD COLUMN brokerName VARCHAR(100) NULL,\n  ADD COLUMN jobReference VARCHAR(100) NULL,\n  ADD COLUMN bookingImageUrl TEXT NULL,\n  ADD COLUMN notes TEXT NULL;\n",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway02.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 29dmg1z8s7MGkda.cd2f01f00c99 --database 6VTDyDwMUZs22XSbYJviE3 --execute \nALTER TABLE jobs\n  ADD COLUMN brokerName VARCHAR(100) NULL,\n  ADD COLUMN jobReference VARCHAR(100) NULL,\n  ADD COLUMN bookingImageUrl TEXT NULL,\n  ADD COLUMN notes TEXT NULL;\n",
+  "rows": [],
+  "messages": [],
+  "stdout": "",
+  "stderr": "",
+  "execution_time_ms": 1631
+}

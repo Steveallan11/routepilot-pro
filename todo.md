@@ -56,3 +56,12 @@
 
 ## Fix: Scan Booking input
 - [x] Remove capture="environment" so users can choose from gallery/files, not just camera
+
+## Feature: Full Job Logging & Job Sheet
+- [x] DB: Add scan fields to jobs table (brokerName, jobReference, scheduledDate, pickupAddress, dropoffAddress, distanceMiles, durationMins, bookingImageUrl, notes)
+- [x] DB: Migrate schema
+- [x] Server: Update jobs.create procedure to accept and store all scan fields
+- [x] Server: Update jobs.list/get to return all fields
+- [x] Frontend: Pass all scan data through to save mutation
+- [x] Frontend: Job sheet shows full details (broker, ref, addresses, distance, duration, image thumbnail)
+- [x] Frontend: History list shows broker name and job reference
