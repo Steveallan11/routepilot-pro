@@ -287,12 +287,13 @@ function JobDetailSheet({ job, onClose, onStatusChange }: { job: Job; onClose: (
 
 // ─── Day View ─────────────────────────────────────────────────────────────────
 
-function DayView({ jobs, date, onJobClick }: { jobs: Job[]; date: Date; onJobClick: (j: Job) => void }) {
+function DayView({ jobs, chains, allJobs, date, onJobClick }: { jobs: Job[]; chains: ChainEntry[]; allJobs: Job[]; date: Date; onJobClick: (j: Job) => void }) {
   const hours = Array.from({ length: 18 }, (_, i) => i + 5); // 05:00 – 22:00
   const dayJobs = jobs.filter(j => {
     const d = getJobDate(j);
     return d && isSameDay(d, date);
   });
+  const dayChains = chains.filter(c => c.scheduledDate && isSameDay(new Date(c.scheduledDate), date));
 
   // Jobs with a scheduled time
   const timedJobs = dayJobs.filter(j => j.scheduledPickupAt);
@@ -307,6 +308,26 @@ function DayView({ jobs, date, onJobClick }: { jobs: Job[]; date: Date; onJobCli
 
   return (
     <div className="flex flex-col gap-3">
+      {/* Chain entries for this day */}
+      {dayChains.length > 0 && (
+        <div className="px-4 space-y-2">
+          <p className="text-xs text-muted-foreground font-medium">Linked Chain</p>
+          {dayChains.map(chain => (
+            <div key={`chain-${chain.id}`} className="rounded-xl border border-primary/30 bg-primary/5 p-3">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-xs font-bold text-primary">CHAIN — {chain.name ?? `#${chain.id}`}</span>
+                <span className="text-xs font-mono text-primary">+£{chain.totalNetProfit.toFixed(0)} net</span>
+              </div>
+              {allJobs.filter(j => chain.jobIds.includes(j.id)).map((j, i) => (
+                <button key={j.id} onClick={() => onJobClick(j)} className="w-full text-left py-1 border-t border-border/30 first:border-t-0">
+                  <p className="text-xs text-foreground">{i + 1}. {j.pickupPostcode} → {j.dropoffPostcode}</p>
+                  <p className="text-[10px] text-muted-foreground">£{j.deliveryFee.toFixed(0)} · {j.estimatedDistanceMiles?.toFixed(0) ?? "?"}mi</p>
+                </button>
+              ))}
+            </div>
+          ))}
+        </div>
+      )}
       {untimedJobs.length > 0 && (
         <div className="px-4 space-y-2">
           <p className="text-xs text-muted-foreground font-medium">No time set</p>
@@ -357,7 +378,7 @@ function DayView({ jobs, date, onJobClick }: { jobs: Job[]; date: Date; onJobCli
           );
         })()}
       </div>
-      {dayJobs.length === 0 && (
+      {dayJobs.length === 0 && dayChains.length === 0 && (
         <div className="flex flex-col items-center justify-center py-12 text-center px-4">
           <CalendarDays size={32} className="text-muted-foreground/40 mb-3" />
           <p className="text-sm text-muted-foreground">No jobs on this day</p>
@@ -370,7 +391,7 @@ function DayView({ jobs, date, onJobClick }: { jobs: Job[]; date: Date; onJobCli
 
 // ─── Week View ────────────────────────────────────────────────────────────────
 
-function WeekView({ jobs, weekStart, onJobClick, onDayClick }: { jobs: Job[]; weekStart: Date; onJobClick: (j: Job) => void; onDayClick: (d: Date) => void }) {
+function WeekView({ jobs, chains, allJobs, weekStart, onJobClick, onDayClick }: { jobs: Job[]; chains: ChainEntry[]; allJobs: Job[]; weekStart: Date; onJobClick: (j: Job) => void; onDayClick: (d: Date) => void }) {
   const days = Array.from({ length: 7 }, (_, i) => {
     const d = new Date(weekStart);
     d.setDate(d.getDate() + i);
@@ -395,12 +416,16 @@ function WeekView({ jobs, weekStart, onJobClick, onDayClick }: { jobs: Job[]; we
           </div>
         ))}
       </div>
-      {/* Earnings strip */}
+      {/* Earnings strip — standalone jobs + chain totals, no double-counting */}
       <div className="grid grid-cols-7 gap-1 mb-2">
         {days.map(d => {
-          const dayEarnings = jobs
+          const standaloneEarnings = jobs
             .filter(j => { const jd = getJobDate(j); return jd && isSameDay(jd, d) && j.status !== "cancelled"; })
             .reduce((s, j) => s + (j.actualNetProfit ?? j.estimatedNetProfit ?? 0), 0);
+          const chainEarnings = chains
+            .filter(c => c.scheduledDate && isSameDay(new Date(c.scheduledDate), d) && c.status !== "cancelled")
+            .reduce((s, c) => s + c.totalNetProfit, 0);
+          const dayEarnings = standaloneEarnings + chainEarnings;
           return (
             <div key={d.toISOString()} className="text-center">
               {dayEarnings !== 0 ? (
@@ -424,8 +449,15 @@ function WeekView({ jobs, weekStart, onJobClick, onDayClick }: { jobs: Job[]; we
             const jd = getJobDate(j);
             return jd && isSameDay(jd, d);
           });
+          const dayChains = chains.filter(c => c.scheduledDate && isSameDay(new Date(c.scheduledDate), d));
+          const hasItems = dayJobs.length > 0 || dayChains.length > 0;
           return (
             <div key={d.toISOString()} className="min-h-[120px] space-y-1">
+              {/* Chain cards first */}
+              {dayChains.map(chain => (
+                <ChainCard key={`chain-${chain.id}`} chain={chain} jobs={allJobs} />
+              ))}
+              {/* Standalone job cards */}
               {dayJobs.map(job => {
                 const cfg = STATUS_CONFIG[job.status];
                 return (
@@ -446,7 +478,7 @@ function WeekView({ jobs, weekStart, onJobClick, onDayClick }: { jobs: Job[]; we
                   </button>
                 );
               })}
-              {dayJobs.length === 0 && (
+              {!hasItems && (
                 <button onClick={() => onDayClick(d)} className="w-full h-full min-h-[120px] rounded-lg border border-dashed border-border/40 hover:border-border/70 transition-colors" />
               )}
             </div>
@@ -459,7 +491,7 @@ function WeekView({ jobs, weekStart, onJobClick, onDayClick }: { jobs: Job[]; we
 
 // ─── Month View ───────────────────────────────────────────────────────────────
 
-function MonthView({ jobs, month, year, onDayClick }: { jobs: Job[]; month: number; year: number; onDayClick: (d: Date) => void }) {
+function MonthView({ jobs, chains, allJobs, month, year, onDayClick }: { jobs: Job[]; chains: ChainEntry[]; allJobs: Job[]; month: number; year: number; onDayClick: (d: Date) => void }) {
   const firstDay = new Date(year, month, 1);
   const lastDay = new Date(year, month + 1, 0);
   const startOffset = (firstDay.getDay() + 6) % 7; // Mon=0
@@ -486,7 +518,11 @@ function MonthView({ jobs, month, year, onDayClick }: { jobs: Job[]; month: numb
             const jd = getJobDate(j);
             return jd && isSameDay(jd, d);
           });
-          const totalProfit = dayJobs.reduce((s, j) => s + (j.actualNetProfit ?? j.estimatedNetProfit ?? 0), 0);
+          const dayChains = chains.filter(c => c.scheduledDate && isSameDay(new Date(c.scheduledDate), d));
+          const standaloneProfit = dayJobs.reduce((s, j) => s + (j.actualNetProfit ?? j.estimatedNetProfit ?? 0), 0);
+          const chainProfit = dayChains.reduce((s, c) => s + c.totalNetProfit, 0);
+          const totalProfit = standaloneProfit + chainProfit;
+          const hasItems = dayJobs.length > 0 || dayChains.length > 0;
           const isToday = isSameDay(d, new Date());
           return (
             <button
@@ -495,16 +531,19 @@ function MonthView({ jobs, month, year, onDayClick }: { jobs: Job[]; month: numb
               className={cn(
                 "aspect-square flex flex-col items-center justify-center rounded-lg transition-colors relative",
                 isToday ? "bg-primary/10 ring-1 ring-primary" : "hover:bg-secondary",
-                dayJobs.length > 0 ? "cursor-pointer" : ""
+                hasItems ? "cursor-pointer" : ""
               )}
             >
               <span className={cn("text-xs font-bold", isToday ? "text-primary" : "text-foreground")}>
                 {d.getDate()}
               </span>
-              {dayJobs.length > 0 && (
+              {hasItems && (
                 <>
                   <div className="flex gap-0.5 mt-0.5">
-                    {dayJobs.slice(0, 3).map(j => (
+                    {dayChains.slice(0, 2).map(c => (
+                      <div key={`c-${c.id}`} className="w-1.5 h-1.5 rounded-full bg-primary" />
+                    ))}
+                    {dayJobs.slice(0, Math.max(0, 3 - dayChains.length)).map(j => (
                       <div key={j.id} className={cn("w-1.5 h-1.5 rounded-full", STATUS_CONFIG[j.status].dot)} />
                     ))}
                   </div>
@@ -568,6 +607,46 @@ function JobCard({ job, onClick, compact }: { job: Job; onClick: () => void; com
   );
 }
 
+// ─── Chain Card ──────────────────────────────────────────────────────────────
+
+type ChainEntry = {
+  id: number;
+  name: string | null;
+  totalNetProfit: number;
+  totalEarnings: number;
+  totalDistanceMiles: number;
+  jobIds: number[];
+  scheduledDate: Date | null;
+  status: "planned" | "active" | "completed" | "cancelled";
+};
+
+function ChainCard({ chain, jobs }: { chain: ChainEntry; jobs: Job[] }) {
+  const chainJobs = jobs.filter(j => chain.jobIds.includes(j.id));
+  const cfg = STATUS_CONFIG[chain.status] ?? STATUS_CONFIG.planned;
+  const StatusIcon = cfg.icon;
+  return (
+    <div className={`w-full rounded-xl border p-2 ${cfg.bg}`}>
+      <div className="flex items-center gap-1 mb-1">
+        <StatusIcon size={10} className={cfg.color} />
+        <span className={`text-[9px] font-bold ${cfg.color}`}>CHAIN</span>
+        {chain.scheduledDate && (
+          <span className="text-[9px] text-muted-foreground ml-auto">
+            {new Date(chain.scheduledDate).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}
+          </span>
+        )}
+      </div>
+      {chainJobs.map((j, i) => (
+        <p key={j.id} className="text-[9px] text-foreground truncate">
+          {i + 1}. {j.pickupPostcode}→{j.dropoffPostcode}
+        </p>
+      ))}
+      <p className="text-[9px] font-bold font-mono text-primary mt-1">
+        +£{chain.totalNetProfit.toFixed(0)} net
+      </p>
+    </div>
+  );
+}
+
 // ─── Main Calendar Page ───────────────────────────────────────────────────────
 
 export default function Calendar() {
@@ -581,11 +660,21 @@ export default function Calendar() {
     { limit: 100 },
     { enabled: isAuthenticated }
   );
+  const { data: chainsData } = trpc.chains.listWithJobs.useQuery(
+    undefined,
+    { enabled: isAuthenticated }
+  );
   const updateMutation = trpc.jobs.update.useMutation({
     onSuccess: () => { allJobsData; },
   });
 
   const allJobs = (allJobsData?.jobs ?? []) as Job[];
+  const allChains = (chainsData ?? []) as ChainEntry[];
+
+  // Build set of job IDs that belong to a saved chain — exclude these from individual calendar entries
+  const chainedJobIds = new Set(allChains.flatMap(c => c.jobIds));
+  // Only show standalone (non-chained) jobs as individual entries
+  const standaloneJobs = allJobs.filter(j => !chainedJobIds.has(j.id));
 
   // Navigation helpers
   function navigate_date(dir: 1 | -1) {
@@ -718,14 +807,18 @@ export default function Calendar() {
       <div className="flex-1 overflow-y-auto pt-3">
         {view === "day" && (
           <DayView
-            jobs={allJobs}
+            jobs={standaloneJobs}
+            chains={allChains}
+            allJobs={allJobs}
             date={currentDate}
             onJobClick={setSelectedJob}
           />
         )}
         {view === "week" && (
           <WeekView
-            jobs={allJobs}
+            jobs={standaloneJobs}
+            chains={allChains}
+            allJobs={allJobs}
             weekStart={weekStart}
             onJobClick={setSelectedJob}
             onDayClick={(d) => { setCurrentDate(d); setView("day"); }}
@@ -733,7 +826,9 @@ export default function Calendar() {
         )}
         {view === "month" && (
           <MonthView
-            jobs={allJobs}
+            jobs={standaloneJobs}
+            chains={allChains}
+            allJobs={allJobs}
             month={currentDate.getMonth()}
             year={currentDate.getFullYear()}
             onDayClick={(d) => { setCurrentDate(d); setView("day"); }}

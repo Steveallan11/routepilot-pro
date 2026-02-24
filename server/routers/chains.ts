@@ -687,6 +687,37 @@ export const chainsRouter = router({
     }),
 
   // List saved chains
+  listWithJobs: protectedProcedure
+    .query(async ({ ctx }) => {
+      const db = await getDb();
+      if (!db) return [];
+      const chains = await db.select().from(jobChains)
+        .where(eq(jobChains.userId, ctx.user.id))
+        .orderBy(desc(jobChains.createdAt));
+      // For each chain, fetch the job IDs and first job's scheduled pickup time
+      const result = await Promise.all(chains.map(async (c) => {
+        const cjRows = await db.select().from(chainJobs).where(eq(chainJobs.chainId, c.id)).orderBy(chainJobs.position);
+        const jobIds = cjRows.map(r => r.jobId);
+        // Get scheduled date from first job if chain doesn't have one
+        let scheduledDate = c.scheduledDate;
+        if (!scheduledDate && jobIds.length > 0) {
+          const firstJob = await db.select({ scheduledPickupAt: jobs.scheduledPickupAt })
+            .from(jobs).where(eq(jobs.id, jobIds[0]!)).limit(1);
+          if (firstJob[0]?.scheduledPickupAt) scheduledDate = firstJob[0].scheduledPickupAt;
+        }
+        return {
+          ...c,
+          totalEarnings: Number(c.totalEarnings ?? 0),
+          totalCosts: Number(c.totalCosts ?? 0),
+          totalNetProfit: Number(c.totalNetProfit ?? 0),
+          totalDistanceMiles: Number(c.totalDistanceMiles ?? 0),
+          jobIds,
+          scheduledDate,
+        };
+      }));
+      return result;
+    }),
+
   list: protectedProcedure
     .query(async ({ ctx }) => {
       const db = await getDb();

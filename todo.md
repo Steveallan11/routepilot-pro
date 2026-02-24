@@ -266,3 +266,10 @@
 - [x] UI: show Google Map with all drive legs plotted in chain result section
 - [x] UI: DirectionsService plots all waypoints (home → pickup1 → dropoff1 → pickup2 → dropoff2 → home)
 - [x] UI: map auto-fits bounds to show all legs
+
+## Fix: Calendar Duplicate Jobs in Chains
+- [x] Server: chains.listWithJobs returns job IDs + scheduledDate for each saved chain
+- [x] UI: Calendar fetches chains separately and builds a Set of chained job IDs
+- [x] UI: standaloneJobs = all jobs minus chained job IDs (no duplicates)
+- [x] UI: calendar shows chain as a single grouped card in all 3 views (day/week/month)
+- [x] UI: earnings strip uses standalone job profits + chain totalNetProfit (no double-count)
