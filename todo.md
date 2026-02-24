@@ -279,3 +279,11 @@
 - [x] Server: add chain net profits/earnings/miles to today/week totals separately
 - [x] Server: history.summary also deduplicates chained jobs and adds chain totals
 - [x] UI: Today's Profit, Week Profit, job count, and miles all show correct deduplicated figures
+
+## Feature: Chain Complete Button + Transport Cost Display + Chart Fix
+- [x] Server: chains.complete procedure — marks chain status=completed and all its jobs status=completed
+- [x] Server: chains.delete procedure — removes chain without deleting individual jobs
+- [x] UI: "✓ Complete" and "✕" buttons in Calendar chain card (all 3 views)
+- [x] UI: Chain card shows Gross / Travel cost deduction / Net breakdown
+- [x] Server: getDashboardStats dailyBreakdown merges standalone job profit + chain profit per day
+- [x] UI: Weekly chart bars now include chain profit for each day

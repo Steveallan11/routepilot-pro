@@ -686,6 +686,62 @@ export const chainsRouter = router({
       return { success: true };
     }),
 
+  // Mark a chain and all its jobs as completed
+  complete: protectedProcedure
+    .input(z.object({ chainId: z.number() }))
+    .mutation(async ({ ctx, input }) => {
+      const db = await getDb();
+      if (!db) throw new Error("Database unavailable");
+
+      // Verify ownership
+      const chain = await db.select().from(jobChains)
+        .where(and(eq(jobChains.id, input.chainId), eq(jobChains.userId, ctx.user.id)))
+        .limit(1);
+      if (!chain[0]) throw new Error("Chain not found");
+
+      // Get all job IDs in this chain
+      const cjRows = await db.select({ jobId: chainJobs.jobId })
+        .from(chainJobs).where(eq(chainJobs.chainId, input.chainId));
+      const jobIds = cjRows.map(r => r.jobId);
+
+      const now = new Date();
+
+      // Mark all jobs as completed
+      if (jobIds.length > 0) {
+        await db.update(jobs)
+          .set({ status: "completed", completedAt: now })
+          .where(and(inArray(jobs.id, jobIds), eq(jobs.userId, ctx.user.id)));
+      }
+
+      // Mark the chain as completed
+      await db.update(jobChains)
+        .set({ status: "completed" })
+        .where(eq(jobChains.id, input.chainId));
+
+      return { success: true, jobsCompleted: jobIds.length };
+    }),
+
+  // Delete a saved chain (does NOT delete the individual jobs)
+  delete: protectedProcedure
+    .input(z.object({ chainId: z.number() }))
+    .mutation(async ({ ctx, input }) => {
+      const db = await getDb();
+      if (!db) throw new Error("Database unavailable");
+
+      // Verify ownership
+      const chain = await db.select().from(jobChains)
+        .where(and(eq(jobChains.id, input.chainId), eq(jobChains.userId, ctx.user.id)))
+        .limit(1);
+      if (!chain[0]) throw new Error("Chain not found");
+
+      // Remove chain_jobs entries first
+      await db.delete(chainJobs).where(eq(chainJobs.chainId, input.chainId));
+      // Remove the chain itself
+      await db.delete(jobChains).where(eq(jobChains.id, input.chainId));
+
+      return { success: true };
+    }),
+
   // List saved chains
   listWithJobs: protectedProcedure
     .query(async ({ ctx }) => {

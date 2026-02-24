@@ -287,7 +287,7 @@ function JobDetailSheet({ job, onClose, onStatusChange }: { job: Job; onClose: (
 
 // ─── Day View ─────────────────────────────────────────────────────────────────
 
-function DayView({ jobs, chains, allJobs, date, onJobClick }: { jobs: Job[]; chains: ChainEntry[]; allJobs: Job[]; date: Date; onJobClick: (j: Job) => void }) {
+function DayView({ jobs, chains, allJobs, date, onJobClick, onRefresh }: { jobs: Job[]; chains: ChainEntry[]; allJobs: Job[]; date: Date; onJobClick: (j: Job) => void; onRefresh: () => void }) {
   const hours = Array.from({ length: 18 }, (_, i) => i + 5); // 05:00 – 22:00
   const dayJobs = jobs.filter(j => {
     const d = getJobDate(j);
@@ -313,18 +313,7 @@ function DayView({ jobs, chains, allJobs, date, onJobClick }: { jobs: Job[]; cha
         <div className="px-4 space-y-2">
           <p className="text-xs text-muted-foreground font-medium">Linked Chain</p>
           {dayChains.map(chain => (
-            <div key={`chain-${chain.id}`} className="rounded-xl border border-primary/30 bg-primary/5 p-3">
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-xs font-bold text-primary">CHAIN — {chain.name ?? `#${chain.id}`}</span>
-                <span className="text-xs font-mono text-primary">+£{chain.totalNetProfit.toFixed(0)} net</span>
-              </div>
-              {allJobs.filter(j => chain.jobIds.includes(j.id)).map((j, i) => (
-                <button key={j.id} onClick={() => onJobClick(j)} className="w-full text-left py-1 border-t border-border/30 first:border-t-0">
-                  <p className="text-xs text-foreground">{i + 1}. {j.pickupPostcode} → {j.dropoffPostcode}</p>
-                  <p className="text-[10px] text-muted-foreground">£{j.deliveryFee.toFixed(0)} · {j.estimatedDistanceMiles?.toFixed(0) ?? "?"}mi</p>
-                </button>
-              ))}
-            </div>
+            <ChainCard key={`chain-${chain.id}`} chain={chain} jobs={allJobs} onRefresh={onRefresh} />
           ))}
         </div>
       )}
@@ -391,7 +380,7 @@ function DayView({ jobs, chains, allJobs, date, onJobClick }: { jobs: Job[]; cha
 
 // ─── Week View ────────────────────────────────────────────────────────────────
 
-function WeekView({ jobs, chains, allJobs, weekStart, onJobClick, onDayClick }: { jobs: Job[]; chains: ChainEntry[]; allJobs: Job[]; weekStart: Date; onJobClick: (j: Job) => void; onDayClick: (d: Date) => void }) {
+function WeekView({ jobs, chains, allJobs, weekStart, onJobClick, onDayClick, onRefresh }: { jobs: Job[]; chains: ChainEntry[]; allJobs: Job[]; weekStart: Date; onJobClick: (j: Job) => void; onDayClick: (d: Date) => void; onRefresh: () => void }) {
   const days = Array.from({ length: 7 }, (_, i) => {
     const d = new Date(weekStart);
     d.setDate(d.getDate() + i);
@@ -455,7 +444,7 @@ function WeekView({ jobs, chains, allJobs, weekStart, onJobClick, onDayClick }: 
             <div key={d.toISOString()} className="min-h-[120px] space-y-1">
               {/* Chain cards first */}
               {dayChains.map(chain => (
-                <ChainCard key={`chain-${chain.id}`} chain={chain} jobs={allJobs} />
+                <ChainCard key={`chain-${chain.id}`} chain={chain} jobs={allJobs} onRefresh={onRefresh} />
               ))}
               {/* Standalone job cards */}
               {dayJobs.map(job => {
@@ -614,21 +603,41 @@ type ChainEntry = {
   name: string | null;
   totalNetProfit: number;
   totalEarnings: number;
+  totalCosts: number;
   totalDistanceMiles: number;
   jobIds: number[];
   scheduledDate: Date | null;
   status: "planned" | "active" | "completed" | "cancelled";
 };
 
-function ChainCard({ chain, jobs }: { chain: ChainEntry; jobs: Job[] }) {
+function ChainCard({ chain, jobs, onRefresh }: { chain: ChainEntry; jobs: Job[]; onRefresh: () => void }) {
   const chainJobs = jobs.filter(j => chain.jobIds.includes(j.id));
   const cfg = STATUS_CONFIG[chain.status] ?? STATUS_CONFIG.planned;
   const StatusIcon = cfg.icon;
+  const utils = trpc.useUtils();
+
+  const completeMutation = trpc.chains.complete.useMutation({
+    onSuccess: () => {
+      utils.chains.listWithJobs.invalidate();
+      utils.jobs.list.invalidate();
+      onRefresh();
+    },
+  });
+  const deleteMutation = trpc.chains.delete.useMutation({
+    onSuccess: () => {
+      utils.chains.listWithJobs.invalidate();
+      utils.jobs.list.invalidate();
+      onRefresh();
+    },
+  });
+
+  const transportCost = chain.totalCosts ?? 0;
+
   return (
     <div className={`w-full rounded-xl border p-2 ${cfg.bg}`}>
       <div className="flex items-center gap-1 mb-1">
         <StatusIcon size={10} className={cfg.color} />
-        <span className={`text-[9px] font-bold ${cfg.color}`}>CHAIN</span>
+        <span className={`text-[9px] font-bold ${cfg.color}`}>CHAIN · {chain.name ?? "Linked Jobs"}</span>
         {chain.scheduledDate && (
           <span className="text-[9px] text-muted-foreground ml-auto">
             {new Date(chain.scheduledDate).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}
@@ -637,12 +646,36 @@ function ChainCard({ chain, jobs }: { chain: ChainEntry; jobs: Job[] }) {
       </div>
       {chainJobs.map((j, i) => (
         <p key={j.id} className="text-[9px] text-foreground truncate">
-          {i + 1}. {j.pickupPostcode}→{j.dropoffPostcode}
+          {i + 1}. {j.pickupPostcode}→{j.dropoffPostcode} <span className="text-muted-foreground">£{Number(j.deliveryFee).toFixed(0)}</span>
         </p>
       ))}
-      <p className="text-[9px] font-bold font-mono text-primary mt-1">
-        +£{chain.totalNetProfit.toFixed(0)} net
-      </p>
+      <div className="mt-1 space-y-0.5">
+        <p className="text-[9px] font-mono text-muted-foreground">
+          Gross: £{chain.totalEarnings.toFixed(0)}
+          {transportCost > 0 && <span className="text-red-400"> · Travel: −£{transportCost.toFixed(0)}</span>}
+        </p>
+        <p className="text-[9px] font-bold font-mono text-primary">
+          Net: +£{chain.totalNetProfit.toFixed(0)}
+        </p>
+      </div>
+      {chain.status !== "completed" && chain.status !== "cancelled" && (
+        <div className="flex gap-1 mt-1.5">
+          <button
+            onClick={() => completeMutation.mutate({ chainId: chain.id })}
+            disabled={completeMutation.isPending}
+            className="flex-1 text-[9px] font-semibold bg-primary/20 text-primary rounded px-1 py-0.5 hover:bg-primary/30 transition-colors"
+          >
+            {completeMutation.isPending ? "..." : "✓ Complete"}
+          </button>
+          <button
+            onClick={() => { if (confirm("Remove this chain? Jobs will remain.")) deleteMutation.mutate({ chainId: chain.id }); }}
+            disabled={deleteMutation.isPending}
+            className="text-[9px] font-semibold bg-red-500/20 text-red-400 rounded px-1 py-0.5 hover:bg-red-500/30 transition-colors"
+          >
+            ✕
+          </button>
+        </div>
+      )}
     </div>
   );
 }
@@ -655,6 +688,7 @@ export default function Calendar() {
   const [view, setView] = useState<ViewMode>("week");
   const [currentDate, setCurrentDate] = useState(() => new Date());
   const [selectedJob, setSelectedJob] = useState<Job | null>(null);
+  const utils = trpc.useUtils();
 
   const { data: allJobsData } = trpc.jobs.list.useQuery(
     { limit: 100 },
@@ -812,6 +846,7 @@ export default function Calendar() {
             allJobs={allJobs}
             date={currentDate}
             onJobClick={setSelectedJob}
+            onRefresh={() => { utils.chains.listWithJobs.invalidate(); utils.jobs.list.invalidate(); }}
           />
         )}
         {view === "week" && (
@@ -822,6 +857,7 @@ export default function Calendar() {
             weekStart={weekStart}
             onJobClick={setSelectedJob}
             onDayClick={(d) => { setCurrentDate(d); setView("day"); }}
+            onRefresh={() => { utils.chains.listWithJobs.invalidate(); utils.jobs.list.invalidate(); }}
           />
         )}
         {view === "month" && (

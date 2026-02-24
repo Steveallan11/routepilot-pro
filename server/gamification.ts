@@ -549,6 +549,27 @@ export async function getDashboardStats(userId: number) {
     }).from(jobChains).where(and(eq(jobChains.userId, userId), gte(jobChains.createdAt, weekStart))),
   ]);
 
+  // Per-day chain breakdown for the weekly chart
+  const chainDailyRows = await db.select({
+    day: sql<string>`DATE(createdAt)`,
+    netProfit: sql<string>`COALESCE(SUM(totalNetProfit), 0)`,
+    earnings: sql<string>`COALESCE(SUM(totalEarnings), 0)`,
+    chainCount: sql<number>`COUNT(*)`,
+  }).from(jobChains)
+    .where(and(eq(jobChains.userId, userId), gte(jobChains.createdAt, weekStart)))
+    .groupBy(sql`DATE(createdAt)`)
+    .orderBy(sql`DATE(createdAt)`);
+
+  // Build a map of chain profit per day
+  const chainByDay = new Map<string, { netProfit: number; earnings: number; count: number }>();
+  for (const row of chainDailyRows) {
+    chainByDay.set(row.day, {
+      netProfit: Number(row.netProfit),
+      earnings: Number(row.earnings),
+      count: Number(row.chainCount),
+    });
+  }
+
   const todayChainEarnings = Number(todayChains[0]?.totalEarnings ?? 0);
   const todayChainNetProfit = Number(todayChains[0]?.totalNetProfit ?? 0);
   const todayChainMiles = Number(todayChains[0]?.totalDistanceMiles ?? 0);
@@ -558,6 +579,23 @@ export async function getDashboardStats(userId: number) {
   const weekChainNetProfit = Number(weekChains[0]?.totalNetProfit ?? 0);
   const weekChainMiles = Number(weekChains[0]?.totalDistanceMiles ?? 0);
   const weekChainCount = Number(weekChains[0]?.chainCount ?? 0);
+
+  // Merge standalone job daily breakdown with chain daily breakdown
+  const allDays = new Set([
+    ...recentJobs.map(r => r.day),
+    ...chainDailyRows.map(r => r.day),
+  ]);
+  const mergedDailyBreakdown = Array.from(allDays).sort().map(day => {
+    const job = recentJobs.find(r => r.day === day);
+    const chain = chainByDay.get(day);
+    return {
+      day,
+      earnings: Number(job?.earnings ?? 0) + Number(chain?.earnings ?? 0),
+      netProfit: Number(job?.netProfit ?? 0) + Number(chain?.netProfit ?? 0),
+      jobCount: Number(job?.jobCount ?? 0) + Number(chain?.count ?? 0),
+      miles: Number(job?.miles ?? 0),
+    };
+  });
 
   return {
     today: {
@@ -574,12 +612,6 @@ export async function getDashboardStats(userId: number) {
       avgProfitPerHour: Number(weekStats[0]?.avgProfitPerHour ?? 0),
     },
     streak: streakRow[0] ?? null,
-    dailyBreakdown: recentJobs.map(r => ({
-      day: r.day,
-      earnings: Number(r.earnings),
-      netProfit: Number(r.netProfit),
-      jobCount: Number(r.jobCount),
-      miles: Number(r.miles),
-    })),
+    dailyBreakdown: mergedDailyBreakdown,
   };
 }
