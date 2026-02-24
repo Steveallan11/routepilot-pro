@@ -366,3 +366,27 @@
 - [x] Fix Add to Calendar — now includes travelToJobCost and correct net profit/transport cost in notes
 - [x] Add tappable job cards in chain result — tap any drive job to open bottom sheet with full details
 - [x] Show travel/reposition leg in job detail sheet — travel summary shown in card and full step breakdown in sheet
+
+## Feature: Chained Job Grouping
+- [ ] DB: add chainId column to jobs table; migration applied
+- [ ] Server: chains.save stamps all jobs with the chainId
+- [ ] Server: jobs.list returns chainId + chainPosition per job
+- [ ] Server: chains.getByChainId returns full chain with per-job P&L breakdown
+- [ ] UI Jobs list: group chained jobs into single card showing combined totals
+- [ ] UI Jobs list: tapping grouped card opens swipeable ChainedJobDetail sheet
+- [ ] UI ChainedJobDetail: one slide per job with full P&L + reposition leg between
+- [ ] UI Calendar: chained jobs appear as single grouped block spanning their time range
+- [ ] UI Calendar: tapping grouped block opens same ChainedJobDetail sheet
+
+## Feature: Chained Job Grouping in Jobs List & Calendar
+- [x] Server: jobs.list returns chainId + chainPosition per job (via chain_jobs join)
+- [x] Server: chains.getByChainId procedure for fetching full chain detail
+- [x] UI Jobs: group chained jobs into a single card with combined fee/net/miles totals
+- [x] UI Jobs: chain card shows mini job pills (each job's route)
+- [x] UI Jobs: tap chain card opens swipeable bottom sheet with per-job P&L slides
+- [x] UI Jobs: slide navigation (dots + arrows) to swipe between jobs in the chain
+- [x] UI Jobs: each slide shows fee, fuel, transport, net profit breakdown + job meta
+- [x] UI Jobs: "Open Full Job Detail" button on each slide
+- [x] UI Calendar: ChainCard now tappable — opens same swipeable P&L sheet
+- [x] UI Calendar: slide navigation in calendar chain sheet
+- [x] UI Calendar: Complete/Delete buttons still work (stopPropagation on tap)

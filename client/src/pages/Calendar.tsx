@@ -611,10 +611,16 @@ type ChainEntry = {
 };
 
 function ChainCard({ chain, jobs, onRefresh }: { chain: ChainEntry; jobs: Job[]; onRefresh: () => void }) {
-  const chainJobs = jobs.filter(j => chain.jobIds.includes(j.id));
+  const chainJobs = jobs.filter(j => chain.jobIds.includes(j.id)).sort((a, b) => {
+    const ta = a.scheduledPickupAt ? Number(a.scheduledPickupAt) : 0;
+    const tb = b.scheduledPickupAt ? Number(b.scheduledPickupAt) : 0;
+    return ta - tb;
+  });
   const cfg = STATUS_CONFIG[chain.status] ?? STATUS_CONFIG.planned;
   const StatusIcon = cfg.icon;
   const utils = trpc.useUtils();
+  const [open, setOpen] = useState(false);
+  const [slideIndex, setSlideIndex] = useState(0);
 
   const completeMutation = trpc.chains.complete.useMutation({
     onSuccess: () => {
@@ -632,51 +638,170 @@ function ChainCard({ chain, jobs, onRefresh }: { chain: ChainEntry; jobs: Job[];
   });
 
   const transportCost = chain.totalCosts ?? 0;
+  const currentJob = chainJobs[slideIndex];
 
   return (
-    <div className={`w-full rounded-xl border p-2 ${cfg.bg}`}>
-      <div className="flex items-center gap-1 mb-1">
-        <StatusIcon size={10} className={cfg.color} />
-        <span className={`text-[9px] font-bold ${cfg.color}`}>CHAIN · {chain.name ?? "Linked Jobs"}</span>
-        {chain.scheduledDate && (
-          <span className="text-[9px] text-muted-foreground ml-auto">
-            {new Date(chain.scheduledDate).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}
-          </span>
-        )}
-      </div>
-      {chainJobs.map((j, i) => (
-        <p key={j.id} className="text-[9px] text-foreground truncate">
-          {i + 1}. {j.pickupPostcode}→{j.dropoffPostcode} <span className="text-muted-foreground">£{Number(j.deliveryFee).toFixed(0)}</span>
-        </p>
-      ))}
-      <div className="mt-1 space-y-0.5">
-        <p className="text-[9px] font-mono text-muted-foreground">
-          Gross: £{chain.totalEarnings.toFixed(0)}
-          {transportCost > 0 && <span className="text-red-400"> · Travel: −£{transportCost.toFixed(0)}</span>}
-        </p>
-        <p className="text-[9px] font-bold font-mono text-primary">
-          Net: +£{chain.totalNetProfit.toFixed(0)}
-        </p>
-      </div>
-      {chain.status !== "completed" && chain.status !== "cancelled" && (
-        <div className="flex gap-1 mt-1.5">
-          <button
-            onClick={() => completeMutation.mutate({ chainId: chain.id })}
-            disabled={completeMutation.isPending}
-            className="flex-1 text-[9px] font-semibold bg-primary/20 text-primary rounded px-1 py-0.5 hover:bg-primary/30 transition-colors"
-          >
-            {completeMutation.isPending ? "..." : "✓ Complete"}
-          </button>
-          <button
-            onClick={() => { if (confirm("Remove this chain? Jobs will remain.")) deleteMutation.mutate({ chainId: chain.id }); }}
-            disabled={deleteMutation.isPending}
-            className="text-[9px] font-semibold bg-red-500/20 text-red-400 rounded px-1 py-0.5 hover:bg-red-500/30 transition-colors"
-          >
-            ✕
-          </button>
+    <>
+      <button onClick={() => { setOpen(true); setSlideIndex(0); }} className={`w-full text-left rounded-xl border p-2 ${cfg.bg} hover:opacity-90 transition-opacity`}>
+        <div className="flex items-center gap-1 mb-1">
+          <StatusIcon size={10} className={cfg.color} />
+          <span className={`text-[9px] font-bold ${cfg.color}`}>CHAIN · {chain.name ?? "Linked Jobs"}</span>
+          {chain.scheduledDate && (
+            <span className="text-[9px] text-muted-foreground ml-auto">
+              {new Date(chain.scheduledDate).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}
+            </span>
+          )}
         </div>
-      )}
-    </div>
+        {chainJobs.map((j, i) => (
+          <p key={j.id} className="text-[9px] text-foreground truncate">
+            {i + 1}. {j.pickupPostcode}→{j.dropoffPostcode} <span className="text-muted-foreground">£{Number(j.deliveryFee).toFixed(0)}</span>
+          </p>
+        ))}
+        <div className="mt-1 space-y-0.5">
+          <p className="text-[9px] font-mono text-muted-foreground">
+            Gross: £{chain.totalEarnings.toFixed(0)}
+            {transportCost > 0 && <span className="text-red-400"> · Travel: −£{transportCost.toFixed(0)}</span>}
+          </p>
+          <p className="text-[9px] font-bold font-mono text-primary">
+            Net: +£{chain.totalNetProfit.toFixed(0)}
+          </p>
+        </div>
+        {chain.status !== "completed" && chain.status !== "cancelled" && (
+          <div className="flex gap-1 mt-1.5" onClick={e => e.stopPropagation()}>
+            <button
+              onClick={() => completeMutation.mutate({ chainId: chain.id })}
+              disabled={completeMutation.isPending}
+              className="flex-1 text-[9px] font-semibold bg-primary/20 text-primary rounded px-1 py-0.5 hover:bg-primary/30 transition-colors"
+            >
+              {completeMutation.isPending ? "..." : "✓ Complete"}
+            </button>
+            <button
+              onClick={() => { if (confirm("Remove this chain? Jobs will remain.")) deleteMutation.mutate({ chainId: chain.id }); }}
+              disabled={deleteMutation.isPending}
+              className="text-[9px] font-semibold bg-red-500/20 text-red-400 rounded px-1 py-0.5 hover:bg-red-500/30 transition-colors"
+            >
+              ✕
+            </button>
+          </div>
+        )}
+      </button>
+
+      {/* Swipeable per-job P&L sheet */}
+      <Sheet open={open} onOpenChange={setOpen}>
+        <SheetContent side="bottom" className="max-h-[92vh] overflow-y-auto rounded-t-2xl p-0">
+          {/* Header */}
+          <div className="px-4 pt-4 pb-3 border-b border-border">
+            <div className="flex items-center justify-between mb-1">
+              <div className={`flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold ${cfg.bg} ${cfg.color}`}>
+                <StatusIcon size={9} /> CHAIN · {chainJobs.length} JOBS
+              </div>
+              <div className="text-right">
+                <span className="text-base font-bold font-mono text-primary">£{chain.totalEarnings.toFixed(0)}</span>
+                <span className={cn("text-xs font-mono ml-2", chain.totalNetProfit >= 0 ? "text-primary/70" : "text-destructive")}>
+                  {chain.totalNetProfit >= 0 ? "+" : ""}£{chain.totalNetProfit.toFixed(0)} net
+                </span>
+              </div>
+            </div>
+            {/* Slide navigation */}
+            <div className="flex items-center justify-between mt-2">
+              <button
+                onClick={() => setSlideIndex(i => Math.max(0, i - 1))}
+                disabled={slideIndex === 0}
+                className="p-1.5 rounded-lg bg-secondary disabled:opacity-30"
+              >
+                <ChevronLeft size={14} />
+              </button>
+              <div className="flex gap-1.5">
+                {chainJobs.map((j, i) => (
+                  <button
+                    key={j.id}
+                    onClick={() => setSlideIndex(i)}
+                    className={cn(
+                      "h-2 rounded-full transition-all",
+                      i === slideIndex ? "bg-primary w-5" : "bg-muted-foreground/30 w-2"
+                    )}
+                  />
+                ))}
+              </div>
+              <button
+                onClick={() => setSlideIndex(i => Math.min(chainJobs.length - 1, i + 1))}
+                disabled={slideIndex === chainJobs.length - 1}
+                className="p-1.5 rounded-lg bg-secondary disabled:opacity-30"
+              >
+                <ChevronRight size={14} />
+              </button>
+            </div>
+          </div>
+          {/* Per-job slide */}
+          {currentJob && (
+            <div className="px-4 py-4">
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="font-bold text-sm">Job {slideIndex + 1} of {chainJobs.length}</h3>
+                <span className="text-xs text-muted-foreground">{currentJob.pickupPostcode} → {currentJob.dropoffPostcode}</span>
+              </div>
+              {/* P&L */}
+              <div className="bg-secondary/50 rounded-xl p-3 space-y-2 mb-3">
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">Delivery Fee</span>
+                  <span className="font-mono font-bold text-primary">+£{Number(currentJob.deliveryFee).toFixed(2)}</span>
+                </div>
+                {(currentJob.estimatedFuelCost ?? 0) > 0 && (
+                  <div className="flex justify-between text-sm">
+                    <span className="text-muted-foreground">Fuel Cost</span>
+                    <span className="font-mono text-destructive">−£{Number(currentJob.estimatedFuelCost).toFixed(2)}</span>
+                  </div>
+                )}
+                {(currentJob.travelToJobCost ?? 0) > 0 && (
+                  <div className="flex justify-between text-sm">
+                    <span className="text-muted-foreground">Transport to Job</span>
+                    <span className="font-mono text-destructive">−£{Number(currentJob.travelToJobCost).toFixed(2)}</span>
+                  </div>
+                )}
+                {(currentJob.travelHomeCost ?? 0) > 0 && (
+                  <div className="flex justify-between text-sm">
+                    <span className="text-muted-foreground">Transport Home</span>
+                    <span className="font-mono text-destructive">−£{Number(currentJob.travelHomeCost).toFixed(2)}</span>
+                  </div>
+                )}
+                <div className="border-t border-border pt-2 flex justify-between text-sm font-bold">
+                  <span>Net Profit</span>
+                  <span className={cn("font-mono", (currentJob.actualNetProfit ?? currentJob.estimatedNetProfit ?? 0) >= 0 ? "text-primary" : "text-destructive")}>
+                    {(currentJob.actualNetProfit ?? currentJob.estimatedNetProfit ?? 0) >= 0 ? "+" : ""}£{Number(currentJob.actualNetProfit ?? currentJob.estimatedNetProfit ?? 0).toFixed(2)}
+                  </span>
+                </div>
+              </div>
+              {/* Job meta */}
+              <div className="space-y-1.5 text-sm">
+                {currentJob.scheduledPickupAt && (
+                  <div className="flex items-center gap-2 text-muted-foreground">
+                    <CalendarDays size={13} />
+                    <span>{new Date(Number(currentJob.scheduledPickupAt)).toLocaleString("en-GB", { weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}</span>
+                  </div>
+                )}
+                {currentJob.estimatedDistanceMiles && (
+                  <div className="flex items-center gap-2 text-muted-foreground">
+                    <Navigation size={13} />
+                    <span>{Number(currentJob.estimatedDistanceMiles).toFixed(1)} mi · {Math.floor((currentJob.estimatedDurationMins ?? 0) / 60)}h {Math.round((currentJob.estimatedDurationMins ?? 0) % 60)}m</span>
+                  </div>
+                )}
+                {currentJob.brokerName && (
+                  <div className="flex items-center gap-2 text-muted-foreground">
+                    <Building2 size={13} />
+                    <span>{currentJob.brokerName}</span>
+                  </div>
+                )}
+                {currentJob.vehicleReg && (
+                  <div className="flex items-center gap-2 text-muted-foreground">
+                    <Car size={13} />
+                    <span>{[currentJob.vehicleMake, currentJob.vehicleModel, currentJob.vehicleReg].filter(Boolean).join(" · ")}</span>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+        </SheetContent>
+      </Sheet>
+    </>
   );
 }
 

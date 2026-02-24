@@ -1,8 +1,8 @@
 import { z } from "zod";
 import { protectedProcedure, router } from "../_core/trpc";
 import { getDb } from "../db";
-import { jobs, userSettings } from "../../drizzle/schema";
-import { eq, and, desc } from "drizzle-orm";
+import { jobs, userSettings, chainJobs, jobChains } from "../../drizzle/schema";
+import { eq, and, desc, inArray } from "drizzle-orm";
 import { makeRequest } from "../_core/map";
 import { calculateJobCost } from "../../shared/routepilot-types";
 import { checkAndAwardBadges } from "../gamification";
@@ -256,6 +256,18 @@ export const jobsRouter = router({
         .limit(input.limit)
         .offset(input.offset);
 
+      // Fetch chain membership for all returned jobs in one query
+      const jobIds = result.map(j => j.id);
+      let chainMembership: Array<{ jobId: number; chainId: number; position: number }> = [];
+      if (jobIds.length > 0) {
+        const chainRows = await db
+          .select({ jobId: chainJobs.jobId, chainId: chainJobs.chainId, position: chainJobs.position })
+          .from(chainJobs)
+          .where(inArray(chainJobs.jobId, jobIds));
+        chainMembership = chainRows;
+      }
+      const chainMap = new Map(chainMembership.map(c => [c.jobId, { chainId: c.chainId, position: c.position }]));
+
       // TiDB/MySQL decimal columns come back as strings from the driver.
       // Coerce all numeric fields to actual numbers before sending to the client.
       const normalised = result.map(j => ({
@@ -281,6 +293,9 @@ export const jobsRouter = router({
         travelHomeCost: j.travelHomeCost != null ? Number(j.travelHomeCost) : null,
         scannedDistanceMiles: j.scannedDistanceMiles != null ? Number(j.scannedDistanceMiles) : null,
         scannedDurationMins: j.scannedDurationMins != null ? Number(j.scannedDurationMins) : null,
+        // Chain membership
+        chainId: chainMap.get(j.id)?.chainId ?? null,
+        chainPosition: chainMap.get(j.id)?.position ?? null,
       }));
       return { jobs: normalised, total: normalised.length };
     }),

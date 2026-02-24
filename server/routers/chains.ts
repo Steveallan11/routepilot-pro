@@ -878,7 +878,61 @@ export const chainsRouter = router({
       return null;
     }),
 
-  // ── Generate a shareable read-only link for a chain ──────────────────────
+  // ── Get full chain detail by chainId (for grouped job view) ─────────────────────────────────────────
+  getByChainId: protectedProcedure
+    .input(z.object({ chainId: z.number() }))
+    .query(async ({ ctx, input }) => {
+      const db = await getDb();
+      if (!db) return null;
+      const chain = await db.select().from(jobChains)
+        .where(and(eq(jobChains.id, input.chainId), eq(jobChains.userId, ctx.user.id)))
+        .limit(1);
+      if (!chain[0]) return null;
+      const cjRows = await db.select().from(chainJobs)
+        .where(eq(chainJobs.chainId, input.chainId))
+        .orderBy(chainJobs.position);
+      const jobIds = cjRows.map(r => r.jobId);
+      if (jobIds.length === 0) return null;
+      const jobRows = await db.select().from(jobs).where(inArray(jobs.id, jobIds));
+      const sortedJobs = jobIds.map(id => jobRows.find(j => j.id === id)!).filter(Boolean);
+      return {
+        chain: {
+          id: chain[0].id,
+          totalEarnings: Number(chain[0].totalEarnings ?? 0),
+          totalCosts: Number(chain[0].totalCosts ?? 0),
+          totalNetProfit: Number(chain[0].totalNetProfit ?? 0),
+          totalDistanceMiles: Number(chain[0].totalDistanceMiles ?? 0),
+          totalDurationMins: Number(chain[0].totalDurationMins ?? 0),
+          profitPerHour: Number(chain[0].profitPerHour ?? 0),
+          transportLegs: (chain[0].repositionLegs ?? []) as unknown[],
+          shareToken: chain[0].shareToken,
+        },
+        jobs: sortedJobs.map(j => ({
+          id: j.id,
+          status: j.status,
+          pickupPostcode: j.pickupPostcode,
+          dropoffPostcode: j.dropoffPostcode,
+          deliveryFee: Number(j.deliveryFee),
+          estimatedDistanceMiles: j.estimatedDistanceMiles != null ? Number(j.estimatedDistanceMiles) : null,
+          estimatedDurationMins: j.estimatedDurationMins != null ? Number(j.estimatedDurationMins) : null,
+          estimatedFuelCost: j.estimatedFuelCost != null ? Number(j.estimatedFuelCost) : null,
+          estimatedNetProfit: j.estimatedNetProfit != null ? Number(j.estimatedNetProfit) : null,
+          travelToJobCost: j.travelToJobCost != null ? Number(j.travelToJobCost) : null,
+          travelHomeCost: j.travelHomeCost != null ? Number(j.travelHomeCost) : null,
+          vehicleMake: j.vehicleMake,
+          vehicleModel: j.vehicleModel,
+          vehicleReg: j.vehicleReg,
+          vehicleColour: j.vehicleColour,
+          brokerName: j.brokerName,
+          scheduledPickupAt: j.scheduledPickupAt,
+          scheduledDropoffAt: j.scheduledDropoffAt,
+          notes: j.notes,
+          worthItScore: j.worthItScore,
+        })),
+      };
+    }),
+
+  // ── Generate a shareable read-only link for a chain ──────────────────────────────────────
   createShareLink: protectedProcedure
     .input(z.object({ chainId: z.number() }))
     .mutation(async ({ ctx, input }) => {

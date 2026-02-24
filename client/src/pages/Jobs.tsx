@@ -111,6 +111,9 @@ type Job = {
   travelRouteData: unknown | null;
   completedAt: Date | null;
   createdAt: Date;
+  // Chain membership (populated by jobs.list)
+  chainId: number | null;
+  chainPosition: number | null;
 };
 
 const STATUS_CONFIG: Record<JobStatus, { label: string; color: string; bg: string; dot: string; icon: React.ElementType }> = {
@@ -1741,6 +1744,38 @@ export default function Jobs({ prefilledDate: initialDate }: { prefilledDate?: s
     return true;
   });
 
+  // Group chained jobs together — each chain becomes one grouped entry
+  type ChainGroup = { type: 'chain'; chainId: number; jobs: Job[] };
+  type SingleJob = { type: 'single'; job: Job };
+  type ListEntry = ChainGroup | SingleJob;
+
+  const listEntries = useMemo((): ListEntry[] => {
+    const seen = new Set<number>();
+    const entries: ListEntry[] = [];
+    const chainMap = new Map<number, Job[]>();
+    for (const j of filteredJobs) {
+      if (j.chainId != null) {
+        if (!chainMap.has(j.chainId)) chainMap.set(j.chainId, []);
+        chainMap.get(j.chainId)!.push(j);
+      }
+    }
+    for (const j of filteredJobs) {
+      if (seen.has(j.id)) continue;
+      if (j.chainId != null && chainMap.has(j.chainId)) {
+        const chainJobs = chainMap.get(j.chainId)!.sort((a, b) => (a.chainPosition ?? 0) - (b.chainPosition ?? 0));
+        chainJobs.forEach(cj => seen.add(cj.id));
+        entries.push({ type: 'chain', chainId: j.chainId, jobs: chainJobs });
+      } else {
+        seen.add(j.id);
+        entries.push({ type: 'single', job: j });
+      }
+    }
+    return entries;
+  }, [filteredJobs]);
+
+  const [selectedChainId, setSelectedChainId] = useState<number | null>(null);
+  const [chainSlideIndex, setChainSlideIndex] = useState(0);
+
   // Summary stats for current tab
   const totalEarnings = filteredJobs.reduce((s, j) => s + Number(j.deliveryFee), 0);
   const totalProfit = filteredJobs.reduce((s, j) => s + Number(j.actualNetProfit ?? j.estimatedNetProfit ?? 0), 0);
@@ -1862,7 +1897,7 @@ export default function Jobs({ prefilledDate: initialDate }: { prefilledDate?: s
 
       {/* Job list */}
       <div className="flex-1 overflow-y-auto px-4 py-3 space-y-2">
-        {filteredJobs.length === 0 ? (
+        {listEntries.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-16 text-center">
             <Briefcase size={40} className="text-muted-foreground/30 mb-3" />
             <p className="text-sm font-medium text-muted-foreground">
@@ -1875,24 +1910,80 @@ export default function Jobs({ prefilledDate: initialDate }: { prefilledDate?: s
             )}
           </div>
         ) : (
-          filteredJobs.map(job => {
-            // Swipe right → advance status; swipe left → cancel
+          listEntries.map(entry => {
+            if (entry.type === 'chain') {
+              // Grouped chain card
+              const chainJobs = entry.jobs;
+              const totalFee = chainJobs.reduce((s, j) => s + j.deliveryFee, 0);
+              const totalNet = chainJobs.reduce((s, j) => s + (j.actualNetProfit ?? j.estimatedNetProfit ?? 0), 0);
+              const totalMiles = chainJobs.reduce((s, j) => s + (j.actualDistanceMiles ?? j.estimatedDistanceMiles ?? 0), 0);
+              const firstJob = chainJobs[0]!;
+              const lastJob = chainJobs[chainJobs.length - 1]!;
+              const pickupTime = firstJob.scheduledPickupAt
+                ? new Date(Number(firstJob.scheduledPickupAt)).toLocaleString("en-GB", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })
+                : null;
+              return (
+                <button
+                  key={`chain-${entry.chainId}`}
+                  onClick={() => { setSelectedChainId(entry.chainId); setChainSlideIndex(0); }}
+                  className="w-full text-left bg-card border-2 border-primary/30 rounded-2xl p-4 hover:border-primary/60 transition-colors"
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 mb-1">
+                        <div className="flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-primary/15 text-primary text-[10px] font-bold">
+                          <Route size={9} /> CHAIN {chainJobs.length} JOBS
+                        </div>
+                      </div>
+                      <p className="text-base font-bold text-foreground truncate">
+                        {firstJob.pickupPostcode} → {lastJob.dropoffPostcode}
+                      </p>
+                      <div className="flex items-center gap-3 text-xs text-muted-foreground mt-0.5">
+                        {totalMiles > 0 && <span className="flex items-center gap-0.5"><Navigation size={10} /> {fmt(totalMiles, 1)} mi</span>}
+                        <span className="flex items-center gap-0.5"><Briefcase size={10} /> {chainJobs.length} jobs</span>
+                      </div>
+                      {pickupTime && (
+                        <p className="text-xs text-muted-foreground mt-1 flex items-center gap-1">
+                          <CalendarDays size={10} /> {pickupTime}
+                        </p>
+                      )}
+                    </div>
+                    <div className="text-right shrink-0 space-y-1">
+                      <p className="text-lg font-bold font-mono text-primary">£{fmt(totalFee, 0)}</p>
+                      <p className={cn("text-xs font-mono", totalNet >= 0 ? "text-primary/70" : "text-destructive")}>
+                        {totalNet >= 0 ? "+" : ""}£{fmt(totalNet, 0)} net
+                      </p>
+                    </div>
+                  </div>
+                  {/* Mini job pills */}
+                  <div className="flex gap-1.5 mt-2 flex-wrap">
+                    {chainJobs.map((j, i) => (
+                      <span key={j.id} className="text-[10px] px-2 py-0.5 rounded-full bg-secondary text-muted-foreground">
+                        {i + 1}. {j.pickupPostcode}→{j.dropoffPostcode}
+                      </span>
+                    ))}
+                  </div>
+                </button>
+              );
+            }
+            // Single job
+            const job = entry.job;
             const nextStatus = job.status === "planned" ? "active" : job.status === "active" ? "completed" : null;
             const canCancel = job.status !== "cancelled" && job.status !== "completed";
             return (
-            <JobListItem
-              key={job.id}
-              job={job}
-              onClick={() => setSelectedJob(job)}
-              onSwipeRight={nextStatus ? () => {
-                updateMutation.mutate({ id: job.id, status: nextStatus });
-                toast.success(nextStatus === "active" ? "Job started" : "Job completed");
-              } : undefined}
-              onSwipeLeft={canCancel ? () => {
-                updateMutation.mutate({ id: job.id, status: "cancelled" });
-                toast.success("Job cancelled");
-              } : undefined}
-            />
+              <JobListItem
+                key={job.id}
+                job={job}
+                onClick={() => setSelectedJob(job)}
+                onSwipeRight={nextStatus ? () => {
+                  updateMutation.mutate({ id: job.id, status: nextStatus });
+                  toast.success(nextStatus === "active" ? "Job started" : "Job completed");
+                } : undefined}
+                onSwipeLeft={canCancel ? () => {
+                  updateMutation.mutate({ id: job.id, status: "cancelled" });
+                  toast.success("Job cancelled");
+                } : undefined}
+              />
             );
           })
         )}
@@ -1916,6 +2007,139 @@ export default function Jobs({ prefilledDate: initialDate }: { prefilledDate?: s
           onSaved={() => refetch()}
         />
       )}
+      {selectedChainId != null && (() => {
+        const chainEntry = listEntries.find(e => e.type === 'chain' && e.chainId === selectedChainId) as { type: 'chain'; chainId: number; jobs: Job[] } | undefined;
+        if (!chainEntry) return null;
+        const cJobs = chainEntry.jobs;
+        const currentJob = cJobs[chainSlideIndex];
+        if (!currentJob) return null;
+        const totalFee = cJobs.reduce((s, j) => s + j.deliveryFee, 0);
+        const totalNet = cJobs.reduce((s, j) => s + (j.actualNetProfit ?? j.estimatedNetProfit ?? 0), 0);
+        return (
+          <Sheet open onOpenChange={open => !open && setSelectedChainId(null)}>
+            <SheetContent side="bottom" className="max-h-[92vh] overflow-y-auto rounded-t-2xl p-0">
+              {/* Chain header */}
+              <div className="px-4 pt-4 pb-3 border-b border-border">
+                <div className="flex items-center justify-between mb-1">
+                  <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-1 px-2 py-0.5 rounded-md bg-primary/15 text-primary text-[10px] font-bold">
+                      <Route size={9} /> CHAIN · {cJobs.length} JOBS
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <span className="text-base font-bold font-mono text-primary">£{fmt(totalFee, 0)}</span>
+                    <span className={cn("text-xs font-mono ml-2", totalNet >= 0 ? "text-primary/70" : "text-destructive")}>
+                      {totalNet >= 0 ? "+" : ""}£{fmt(totalNet, 0)} net
+                    </span>
+                  </div>
+                </div>
+                {/* Slide dots + arrows */}
+                <div className="flex items-center justify-between mt-2">
+                  <button
+                    onClick={() => setChainSlideIndex(i => Math.max(0, i - 1))}
+                    disabled={chainSlideIndex === 0}
+                    className="p-1.5 rounded-lg bg-secondary disabled:opacity-30"
+                  >
+                    <ChevronRight size={14} className="rotate-180" />
+                  </button>
+                  <div className="flex gap-1.5">
+                    {cJobs.map((j, i) => (
+                      <button
+                        key={j.id}
+                        onClick={() => setChainSlideIndex(i)}
+                        className={cn(
+                          "w-2 h-2 rounded-full transition-all",
+                          i === chainSlideIndex ? "bg-primary w-5" : "bg-muted-foreground/30"
+                        )}
+                      />
+                    ))}
+                  </div>
+                  <button
+                    onClick={() => setChainSlideIndex(i => Math.min(cJobs.length - 1, i + 1))}
+                    disabled={chainSlideIndex === cJobs.length - 1}
+                    className="p-1.5 rounded-lg bg-secondary disabled:opacity-30"
+                  >
+                    <ChevronRight size={14} />
+                  </button>
+                </div>
+              </div>
+              {/* Per-job P&L slide */}
+              <div className="px-4 py-4">
+                <div className="flex items-center justify-between mb-3">
+                  <h3 className="font-bold text-sm">Job {chainSlideIndex + 1} of {cJobs.length}</h3>
+                  <span className="text-xs text-muted-foreground">{currentJob.pickupPostcode} → {currentJob.dropoffPostcode}</span>
+                </div>
+                {/* P&L breakdown */}
+                <div className="bg-secondary/50 rounded-xl p-3 space-y-2 mb-3">
+                  <div className="flex justify-between text-sm">
+                    <span className="text-muted-foreground">Delivery Fee</span>
+                    <span className="font-mono font-bold text-primary">+£{fmt(currentJob.deliveryFee, 2)}</span>
+                  </div>
+                  {(currentJob.estimatedFuelCost ?? 0) > 0 && (
+                    <div className="flex justify-between text-sm">
+                      <span className="text-muted-foreground">Fuel Cost</span>
+                      <span className="font-mono text-destructive">−£{fmt(currentJob.estimatedFuelCost, 2)}</span>
+                    </div>
+                  )}
+                  {(currentJob.travelToJobCost ?? 0) > 0 && (
+                    <div className="flex justify-between text-sm">
+                      <span className="text-muted-foreground">Transport to Job</span>
+                      <span className="font-mono text-destructive">−£{fmt(currentJob.travelToJobCost, 2)}</span>
+                    </div>
+                  )}
+                  {(currentJob.travelHomeCost ?? 0) > 0 && (
+                    <div className="flex justify-between text-sm">
+                      <span className="text-muted-foreground">Transport Home</span>
+                      <span className="font-mono text-destructive">−£{fmt(currentJob.travelHomeCost, 2)}</span>
+                    </div>
+                  )}
+                  <div className="border-t border-border pt-2 flex justify-between text-sm font-bold">
+                    <span>Net Profit</span>
+                    <span className={cn("font-mono", (currentJob.actualNetProfit ?? currentJob.estimatedNetProfit ?? 0) >= 0 ? "text-primary" : "text-destructive")}>
+                      {(currentJob.actualNetProfit ?? currentJob.estimatedNetProfit ?? 0) >= 0 ? "+" : ""}£{fmt(currentJob.actualNetProfit ?? currentJob.estimatedNetProfit ?? 0, 2)}
+                    </span>
+                  </div>
+                </div>
+                {/* Job details */}
+                <div className="space-y-1.5 text-sm">
+                  {currentJob.scheduledPickupAt && (
+                    <div className="flex items-center gap-2 text-muted-foreground">
+                      <CalendarDays size={13} />
+                      <span>{new Date(Number(currentJob.scheduledPickupAt)).toLocaleString("en-GB", { weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}</span>
+                    </div>
+                  )}
+                  {currentJob.estimatedDistanceMiles && (
+                    <div className="flex items-center gap-2 text-muted-foreground">
+                      <Navigation size={13} />
+                      <span>{fmt(currentJob.estimatedDistanceMiles, 1)} mi · {Math.floor((currentJob.estimatedDurationMins ?? 0) / 60)}h {Math.round((currentJob.estimatedDurationMins ?? 0) % 60)}m</span>
+                    </div>
+                  )}
+                  {currentJob.brokerName && (
+                    <div className="flex items-center gap-2 text-muted-foreground">
+                      <Building2 size={13} />
+                      <span>{currentJob.brokerName}</span>
+                    </div>
+                  )}
+                  {currentJob.vehicleReg && (
+                    <div className="flex items-center gap-2 text-muted-foreground">
+                      <Car size={13} />
+                      <span>{[currentJob.vehicleMake, currentJob.vehicleModel, currentJob.vehicleReg].filter(Boolean).join(" · ")}</span>
+                    </div>
+                  )}
+                </div>
+                {/* Open full detail button */}
+                <Button
+                  variant="outline"
+                  className="w-full mt-4 gap-2"
+                  onClick={() => { setSelectedChainId(null); setSelectedJob(currentJob); }}
+                >
+                  <ChevronRight size={14} /> Open Full Job Detail
+                </Button>
+              </div>
+            </SheetContent>
+          </Sheet>
+        );
+      })()}
       {showPlanDay && (
         <PlanDaySheet jobs={allJobs} onClose={() => setShowPlanDay(false)} />
       )}
