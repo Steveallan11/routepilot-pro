@@ -513,7 +513,16 @@ function ChainRouteMap({ jobs, homePostcode }: { jobs: ChainJob[]; homePostcode?
 
 export default function ChainPlanner() {
   const { isAuthenticated } = useAuth();
-  const [selectedJobIds, setSelectedJobIds] = useState<number[]>([]);
+
+  // Pre-select jobs from ?chainJobs=1,2,3 URL param (set by Plan Day sheet in Jobs page)
+  const [selectedJobIds, setSelectedJobIds] = useState<number[]>(() => {
+    const params = new URLSearchParams(window.location.search);
+    const chainJobsParam = params.get("chainJobs");
+    if (chainJobsParam) {
+      return chainJobsParam.split(",").map(Number).filter(n => !isNaN(n) && n > 0);
+    }
+    return [];
+  });
   const [chainResult, setChainResult] = useState<ChainResult | null>(null);
   const [legSelections, setLegSelections] = useState<Array<{ legIndex: number; optionIndex: number }>>([]);
   const [showHomePrompt, setShowHomePrompt] = useState(false);

@@ -1,22 +1,22 @@
 import { z } from "zod";
 import { protectedProcedure, router } from "../_core/trpc";
-import { invokeLLM } from "../_core/llm";
 import { getDb } from "../db";
 import { jobs } from "../../drizzle/schema";
 import { eq, and } from "drizzle-orm";
+import { makeRequest } from "../_core/map";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 export type TravelStep = {
   type: "walk" | "bus" | "train" | "tram" | "tube" | "taxi" | "wait";
-  instruction: string;           // e.g. "Take the 7:50 No. 7 bus"
-  detail: string;                // e.g. "From Stop 37 (Market Square) towards Wellingborough"
-  departureTime: string;         // e.g. "07:50"
-  arrivalTime: string;           // e.g. "08:22"
+  instruction: string;
+  detail: string;
+  departureTime: string;
+  arrivalTime: string;
   durationMins: number;
-  stopOrStation?: string;        // e.g. "Stop 37", "Platform 2", "Wellingborough Station"
-  lineOrService?: string;        // e.g. "No. 7", "East Midlands Railway", "Uber"
-  cost?: number;                 // GBP
+  stopOrStation?: string;
+  lineOrService?: string;
+  cost?: number;
   notes?: string;
 };
 
@@ -28,146 +28,289 @@ export type TravelRoute = {
   totalDurationMins: number;
   totalCost: number;
   steps: TravelStep[];
-  summary: string;               // e.g. "Bus → Train → Taxi"
+  summary: string;
   warnings?: string[];
 };
 
-// ─── LLM schema ──────────────────────────────────────────────────────────────
+// ─── Google Maps types ────────────────────────────────────────────────────────
 
-const travelRouteSchema = {
-  type: "object" as const,
-  properties: {
-    origin: { type: "string", description: "The starting location as provided" },
-    destination: { type: "string", description: "The destination as provided" },
-    departureTime: { type: "string", description: "Overall departure time (HH:MM)" },
-    arrivalTime: { type: "string", description: "Overall arrival time at destination (HH:MM)" },
-    totalDurationMins: { type: "number", description: "Total journey duration in minutes" },
-    totalCost: { type: "number", description: "Total estimated cost in GBP" },
-    summary: { type: "string", description: "Short summary of modes used, e.g. 'Walk → Bus → Train → Taxi'" },
-    warnings: {
-      type: "array",
-      items: { type: "string" },
-      description: "Any warnings such as 'check timetable', 'book taxi in advance', etc."
-    },
-    steps: {
-      type: "array",
-      items: {
-        type: "object",
-        properties: {
-          type: {
-            type: "string",
-            description: "Mode: walk, bus, train, tram, tube, taxi, or wait"
-          },
-          instruction: {
-            type: "string",
-            description: "Primary instruction, e.g. 'Take the 07:50 No. 7 bus'"
-          },
-          detail: {
-            type: "string",
-            description: "Supporting detail, e.g. 'From Stop 37 (Market Square) towards Wellingborough town centre'"
-          },
-          departureTime: { type: "string", description: "Departure time for this step (HH:MM)" },
-          arrivalTime: { type: "string", description: "Arrival time for this step (HH:MM)" },
-          durationMins: { type: "number", description: "Duration of this step in minutes" },
-          stopOrStation: {
-            type: "string",
-            description: "Stop number, station name, or platform (e.g. 'Stop 37', 'Wellingborough Station Platform 1')"
-          },
-          lineOrService: {
-            type: "string",
-            description: "Bus number, train operator, or taxi provider (e.g. 'No. 7', 'East Midlands Railway', 'Uber')"
-          },
-          cost: { type: "number", description: "Cost of this step in GBP (0 if free or unknown)" },
-          notes: {
-            type: "string",
-            description: "Any additional notes for this step (e.g. 'Buy ticket on board', 'Advance booking recommended')"
-          }
-        },
-        required: ["type", "instruction", "detail", "departureTime", "arrivalTime", "durationMins", "stopOrStation", "lineOrService", "cost", "notes"],
-        additionalProperties: false
+interface GoogleDirectionsStep {
+  travel_mode: string;
+  duration: { value: number; text: string };
+  distance: { value: number; text: string };
+  html_instructions: string;
+  transit_details?: {
+    departure_stop?: { name: string };
+    arrival_stop?: { name: string };
+    line?: {
+      name?: string;
+      short_name?: string;
+      agencies?: Array<{ name: string }>;
+      vehicle?: { type?: string };
+    };
+    departure_time?: { text: string };
+    arrival_time?: { text: string };
+    num_stops?: number;
+  };
+}
+
+interface GoogleDirectionsLeg {
+  duration: { value: number; text: string };
+  distance: { value: number; text: string };
+  departure_time?: { text: string };
+  arrival_time?: { text: string };
+  steps: GoogleDirectionsStep[];
+}
+
+interface GoogleDirectionsResult {
+  status: string;
+  routes: Array<{
+    legs: GoogleDirectionsLeg[];
+    summary: string;
+  }>;
+}
+
+function stripHtml(html: string): string {
+  return html.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+}
+
+function fmtTime(unixSecs: number): string {
+  return new Date(unixSecs * 1000).toLocaleTimeString("en-GB", {
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  });
+}
+
+/**
+ * Estimate UK transit cost per step.
+ * Each bus/tram leg = £2.50 (typical UK single fare; England cap is £2.00 on eligible services).
+ * Train = tiered by distance.
+ * Walk/wait = free.
+ */
+function estimateStepCost(
+  mode: string,
+  distanceMetres: number
+): number {
+  const km = distanceMetres / 1000;
+  switch (mode.toUpperCase()) {
+    case "WALKING":
+    case "WALK":
+      return 0;
+    case "BUS":
+      // Each bus leg = £2.50 (Stagecoach/Arriva typical single; some operators cap at £2.00)
+      return 2.50;
+    case "TRAM":
+      return 2.50;
+    case "SUBWAY":
+      return 2.80; // London Tube off-peak
+    case "TRAIN":
+    case "RAIL":
+    case "HEAVY_RAIL":
+    case "COMMUTER_TRAIN":
+    case "HIGH_SPEED_TRAIN":
+    case "INTERCITY_BUS":
+      if (km < 10) return Math.max(3.50, km * 0.35);
+      if (km < 30) return Math.max(6.00, km * 0.28);
+      if (km < 80) return Math.max(10.00, km * 0.22);
+      return Math.max(18.00, km * 0.18);
+    case "FERRY":
+      return 5.00;
+    default:
+      return 0;
+  }
+}
+
+function getStepType(travelMode: string, vehicleType?: string): TravelStep["type"] {
+  if (travelMode === "WALKING") return "walk";
+  if (travelMode !== "TRANSIT") return "walk";
+  const vt = (vehicleType ?? "").toUpperCase();
+  if (vt.includes("BUS") || vt.includes("TROLLEYBUS") || vt.includes("INTERCITY_BUS")) return "bus";
+  if (vt.includes("TRAM") || vt.includes("CABLE_CAR") || vt.includes("GONDOLA")) return "tram";
+  if (vt.includes("SUBWAY") || vt.includes("METRO")) return "tube";
+  return "train";
+}
+
+async function getGoogleTransitRoute(
+  from: string,
+  to: string,
+  departureTimestamp: number
+): Promise<TravelRoute | null> {
+  try {
+    const result = await makeRequest<GoogleDirectionsResult>(
+      "/maps/api/directions/json",
+      {
+        origin: from.includes(",") ? from : `${from}, UK`,
+        destination: to.includes(",") ? to : `${to}, UK`,
+        mode: "transit",
+        alternatives: "false",
+        departure_time: String(departureTimestamp),
+        region: "gb",
+        language: "en-GB",
+        units: "imperial",
+      }
+    );
+
+    if (result.status !== "OK" || !result.routes?.length) {
+      console.warn("[TravelPlanner] Google Maps returned:", result.status);
+      return null;
+    }
+
+    const route = result.routes[0];
+    const leg = route.legs[0];
+    if (!leg) return null;
+
+    const steps: TravelStep[] = [];
+    let totalCost = 0;
+
+    for (const s of leg.steps) {
+      const td = s.transit_details;
+      const vehicleType = td?.line?.vehicle?.type ?? "";
+      const stepType = getStepType(s.travel_mode, vehicleType);
+      const stepCost = estimateStepCost(
+        s.travel_mode === "TRANSIT" ? vehicleType || "TRAIN" : "WALK",
+        s.distance?.value ?? 0
+      );
+      totalCost += stepCost;
+
+      const durationMins = Math.round(s.duration.value / 60);
+      const depUnix = departureTimestamp; // approximate — Google gives leg-level times
+      const depTime = td?.departure_time?.text ?? "";
+      const arrTime = td?.arrival_time?.text ?? "";
+
+      let instruction = "";
+      let detail = "";
+      let stopOrStation = "";
+      let lineOrService = "";
+
+      if (s.travel_mode === "WALKING") {
+        instruction = stripHtml(s.html_instructions);
+        detail = td?.departure_stop?.name ?? "";
+        stopOrStation = td?.departure_stop?.name ?? "";
+        lineOrService = "";
+      } else if (s.travel_mode === "TRANSIT") {
+        const lineName = td?.line?.short_name ?? td?.line?.name ?? "";
+        const operator = td?.line?.agencies?.[0]?.name ?? "";
+        const numStops = td?.num_stops ?? 0;
+        instruction = `Take the ${depTime} ${lineName ? `No. ${lineName}` : vehicleType} towards ${td?.arrival_stop?.name ?? to}`;
+        detail = `From ${td?.departure_stop?.name ?? ""} · ${numStops} stop${numStops !== 1 ? "s" : ""} · ${operator}`;
+        stopOrStation = td?.departure_stop?.name ?? "";
+        lineOrService = lineName ? `No. ${lineName}` : operator;
+      } else {
+        instruction = stripHtml(s.html_instructions);
+        detail = "";
+      }
+
+      steps.push({
+        type: stepType,
+        instruction,
+        detail,
+        departureTime: depTime || "",
+        arrivalTime: arrTime || "",
+        durationMins,
+        stopOrStation,
+        lineOrService,
+        cost: stepCost > 0 ? stepCost : undefined,
+        notes: stepCost > 0 ? `£${stepCost.toFixed(2)}` : "Free",
+      });
+    }
+
+    // Build summary label
+    const modeLabels: string[] = [];
+    for (const step of steps) {
+      if (step.type === "walk" && step.durationMins < 2) continue;
+      const label = step.type === "walk" ? "Walk"
+        : step.type === "bus" ? `Bus${steps.find(s => s.lineOrService)?.lineOrService ? ` ${steps.find(s => s.type === "bus")?.lineOrService}` : ""}`
+        : step.type === "train" ? "Train"
+        : step.type === "tram" ? "Tram"
+        : step.type === "tube" ? "Tube"
+        : step.type;
+      if (!modeLabels.length || modeLabels[modeLabels.length - 1] !== label) {
+        modeLabels.push(label);
       }
     }
-  },
-  required: ["origin", "destination", "departureTime", "arrivalTime", "totalDurationMins", "totalCost", "summary", "warnings", "steps"],
-  additionalProperties: false
-};
+
+    const durationMins = Math.round(leg.duration.value / 60);
+    const warnings: string[] = [];
+    if (durationMins > 90) warnings.push("Long journey — allow extra time for delays");
+    if (steps.filter(s => s.type !== "walk").length > 2) warnings.push("Multiple connections — check live departures before travelling");
+
+    return {
+      origin: from,
+      destination: to,
+      departureTime: leg.departure_time?.text ?? fmtTime(departureTimestamp),
+      arrivalTime: leg.arrival_time?.text ?? fmtTime(departureTimestamp + durationMins * 60),
+      totalDurationMins: durationMins,
+      totalCost: Math.round(totalCost * 100) / 100,
+      steps,
+      summary: modeLabels.join(" → ") || "Walk",
+      warnings,
+    };
+  } catch (err) {
+    console.error("[TravelPlanner] Google Maps error:", err);
+    return null;
+  }
+}
+
+// ─── Router ───────────────────────────────────────────────────────────────────
 
 export const travelPlannerRouter = router({
-  // Plan a multi-modal journey to reach a pickup location
+  // Plan a multi-modal journey to reach a pickup location using real Google Maps data
   planRoute: protectedProcedure
     .input(z.object({
-      fromAddress: z.string().min(2),   // Driver's current location / home postcode
-      toAddress: z.string().min(2),     // Pickup address / postcode
-      arriveBy: z.string().optional(),  // ISO datetime — arrive by this time
-      departAt: z.string().optional(),  // ISO datetime — depart at this time
+      fromAddress: z.string().min(2),
+      toAddress: z.string().min(2),
+      arriveBy: z.string().optional(),  // ISO datetime
+      departAt: z.string().optional(),  // ISO datetime
       preferredModes: z.array(z.enum(["bus", "train", "tram", "tube", "taxi", "walk"])).optional(),
     }))
     .mutation(async ({ input }) => {
-      const { fromAddress, toAddress, arriveBy, departAt, preferredModes } = input;
+      const { fromAddress, toAddress, arriveBy, departAt } = input;
 
-      const now = new Date();
-      const targetTime = arriveBy
-        ? new Date(arriveBy)
-        : departAt
-          ? new Date(departAt)
-          : new Date(now.getTime() + 60 * 60 * 1000); // default: 1 hour from now
+      // Determine departure timestamp for Google Maps
+      let departureTimestamp: number;
+      if (departAt) {
+        departureTimestamp = Math.floor(new Date(departAt).getTime() / 1000);
+      } else if (arriveBy) {
+        // Estimate: depart 90 mins before arrival (will be corrected by Google)
+        departureTimestamp = Math.floor(new Date(arriveBy).getTime() / 1000) - 90 * 60;
+      } else {
+        // Default: next 30 minutes
+        departureTimestamp = Math.floor(Date.now() / 1000) + 1800;
+      }
 
-      const timeContext = arriveBy
-        ? `The driver needs to ARRIVE at the pickup by ${new Date(arriveBy).toLocaleString("en-GB", { weekday: "long", day: "numeric", month: "long", hour: "2-digit", minute: "2-digit" })}.`
-        : departAt
-          ? `The driver plans to DEPART at ${new Date(departAt).toLocaleString("en-GB", { weekday: "long", day: "numeric", month: "long", hour: "2-digit", minute: "2-digit" })}.`
-          : `The driver needs to travel as soon as possible (current time: ${now.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}).`;
+      // Try real Google Maps transit first
+      const realRoute = await getGoogleTransitRoute(fromAddress, toAddress, departureTimestamp);
+      if (realRoute) return realRoute;
 
-      const modesContext = preferredModes && preferredModes.length > 0
-        ? `Preferred transport modes: ${preferredModes.join(", ")}.`
-        : "Use any combination of public transport (bus, train, tram, tube) and taxi/rideshare as needed.";
-
-      const response = await invokeLLM({
-        messages: [
+      // Fallback: generate a basic route with correct cost calculation
+      const depSecs = departureTimestamp;
+      const busMins = 45;
+      const fallbackCost = 2.50; // single bus fare
+      return {
+        origin: fromAddress,
+        destination: toAddress,
+        departureTime: fmtTime(depSecs),
+        arrivalTime: fmtTime(depSecs + busMins * 60),
+        totalDurationMins: busMins,
+        totalCost: fallbackCost,
+        steps: [
           {
-            role: "system",
-            content: `You are an expert UK public transport journey planner. You plan detailed step-by-step multi-modal journeys for car delivery drivers who need to travel to a pickup location using public transport.
-
-Your routes must be REALISTIC and SPECIFIC:
-- Use real UK bus routes with actual route numbers (e.g. "No. 7", "X4", "46A")
-- Use real train operators (East Midlands Railway, CrossCountry, Avanti, etc.)
-- Include real stop numbers where known (e.g. "Stop 37", "Stand B")
-- Include real platform numbers where known
-- Include realistic departure times based on typical timetables
-- Include realistic costs (bus: £1.50-£3, train: varies, taxi: £2.50 flag + £1.50/mile)
-- If taxi is needed for the last mile, calculate realistic cost based on distance
-- Always include a buffer of 5-10 minutes at connections
-- If the journey is impossible by public transport (rural area, late night), recommend taxi for that leg
-- Today's date context: ${now.toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long", year: "numeric" })}`,
-          },
-          {
-            role: "user",
-            content: `Plan a journey for a car delivery driver:
-
-FROM: ${fromAddress}
-TO: ${toAddress} (pickup location)
-
-${timeContext}
-${modesContext}
-
-Please provide a detailed step-by-step journey plan with specific bus numbers, stop numbers, train times, platform numbers, and costs. The driver will be travelling in the UK. Make the instructions clear enough that the driver can follow them without a smartphone — include stop numbers, service numbers, and key landmarks.`,
+            type: "bus" as const,
+            instruction: `Take a bus from ${fromAddress} to ${toAddress}`,
+            detail: "Check local bus timetable for exact times",
+            departureTime: fmtTime(depSecs),
+            arrivalTime: fmtTime(depSecs + busMins * 60),
+            durationMins: busMins,
+            stopOrStation: "Local bus stop",
+            lineOrService: "Local bus",
+            cost: fallbackCost,
+            notes: "£2.50 — check timetable",
           },
         ],
-        response_format: {
-          type: "json_schema",
-          json_schema: {
-            name: "travel_route",
-            strict: true,
-            schema: travelRouteSchema,
-          },
-        },
-      });
-
-      const content = response.choices?.[0]?.message?.content;
-      if (!content) throw new Error("No route generated. Please try again.");
-
-      const route: TravelRoute = typeof content === "string" ? JSON.parse(content) : content;
-      return route;
+        summary: "Bus",
+        warnings: ["Could not load live timetable — check local bus app for exact times"],
+      } as TravelRoute;
     }),
 
   // Save a travel route to a job

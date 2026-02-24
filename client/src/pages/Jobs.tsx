@@ -16,7 +16,8 @@ import {
   Circle, XCircle, AlertCircle, Train, Building2, Hash, FileText,
   Fuel, ChevronDown, ChevronUp, Camera, Loader2, Navigation,
   Trash2, TrendingUp, TrendingDown, Receipt, Search, Filter,
-  CalendarDays, Route, Image as ImageIcon, StickyNote, Copy, Pencil
+  CalendarDays, Route, Image as ImageIcon, StickyNote, Copy, Pencil,
+  Link2, ChevronRight
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { calculateJobCost } from "../../../shared/routepilot-types";
@@ -1554,6 +1555,138 @@ const STATUS_TABS: { key: JobStatus | "all"; label: string }[] = [
   { key: "cancelled", label: "Cancelled" },
 ];
 
+// ─── Quick Plan Day Sheet ─────────────────────────────────────────────────────
+
+function PlanDaySheet({ jobs, onClose }: { jobs: Job[]; onClose: () => void }) {
+  const [navigate] = useLocation();
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+  const [targetDate, setTargetDate] = useState<string>(() => {
+    const d = new Date();
+    return d.toISOString().slice(0, 10);
+  });
+
+  // Filter jobs for the selected date
+  const dateJobs = useMemo(() => {
+    return jobs.filter(j => {
+      if (!j.scheduledPickupAt) return false;
+      const d = new Date(Number(j.scheduledPickupAt));
+      return d.toISOString().slice(0, 10) === targetDate;
+    }).sort((a, b) => Number(a.scheduledPickupAt) - Number(b.scheduledPickupAt));
+  }, [jobs, targetDate]);
+
+  function toggleJob(id: number) {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  }
+
+  function handlePlanChain() {
+    if (selectedIds.size < 1) {
+      toast.error("Select at least one job to plan a chain");
+      return;
+    }
+    const ids = Array.from(selectedIds).join(",");
+    onClose();
+    window.location.href = `/tools?chainJobs=${ids}`;
+  }
+
+  return (
+    <Sheet open onOpenChange={open => !open && onClose()}>
+      <SheetContent side="bottom" className="max-h-[85vh] overflow-y-auto rounded-t-2xl">
+        <SheetHeader className="mb-4">
+          <SheetTitle className="flex items-center gap-2">
+            <Link2 size={18} className="text-primary" />
+            Plan Your Day
+          </SheetTitle>
+        </SheetHeader>
+
+        {/* Date picker */}
+        <div className="mb-4">
+          <Label className="text-xs text-muted-foreground mb-1.5 block">Select date</Label>
+          <Input
+            type="date"
+            value={targetDate}
+            onChange={e => setTargetDate(e.target.value)}
+            className="text-sm"
+          />
+        </div>
+
+        {/* Jobs for the day */}
+        {dateJobs.length === 0 ? (
+          <div className="text-center py-8">
+            <CalendarDays size={32} className="text-muted-foreground/30 mx-auto mb-2" />
+            <p className="text-sm text-muted-foreground">No jobs scheduled for this date</p>
+            <p className="text-xs text-muted-foreground mt-1">Add jobs first, then plan your day</p>
+          </div>
+        ) : (
+          <div className="space-y-2 mb-4">
+            <p className="text-xs text-muted-foreground">
+              {dateJobs.length} job{dateJobs.length !== 1 ? "s" : ""} on this day — tap to select for chain
+            </p>
+            {dateJobs.map(job => {
+              const selected = selectedIds.has(job.id);
+              const pickupTime = job.scheduledPickupAt
+                ? new Date(Number(job.scheduledPickupAt)).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })
+                : "";
+              return (
+                <button
+                  key={job.id}
+                  onClick={() => toggleJob(job.id)}
+                  className={cn(
+                    "w-full flex items-center gap-3 p-3 rounded-xl border text-left transition-all",
+                    selected
+                      ? "border-primary bg-primary/10"
+                      : "border-border bg-secondary/50 hover:bg-secondary"
+                  )}
+                >
+                  <div className={cn(
+                    "w-5 h-5 rounded-full border-2 flex items-center justify-center flex-shrink-0",
+                    selected ? "border-primary bg-primary" : "border-muted-foreground"
+                  )}>
+                    {selected && <CheckCircle2 size={12} className="text-primary-foreground" />}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-mono text-muted-foreground">{pickupTime}</span>
+                      <span className="text-sm font-semibold truncate">
+                        {job.pickupPostcode} → {job.dropoffPostcode}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-2 mt-0.5">
+                      <span className="text-xs text-muted-foreground">{job.brokerName ?? "No broker"}</span>
+                      <span className="text-xs text-primary font-mono">+£{fmt(job.deliveryFee)}</span>
+                    </div>
+                  </div>
+                  <ChevronRight size={14} className="text-muted-foreground flex-shrink-0" />
+                </button>
+              );
+            })}
+          </div>
+        )}
+
+        {/* Action buttons */}
+        <div className="space-y-2">
+          <Button
+            className="w-full gap-2"
+            onClick={handlePlanChain}
+            disabled={selectedIds.size === 0}
+          >
+            <Route size={15} />
+            Plan Chain ({selectedIds.size} job{selectedIds.size !== 1 ? "s" : ""} selected)
+          </Button>
+          <Button variant="outline" className="w-full" onClick={onClose}>
+            Cancel
+          </Button>
+        </div>
+      </SheetContent>
+    </Sheet>
+  );
+}
+
+// ─── Main Jobs Page ───────────────────────────────────────────────────────────
+
 export default function Jobs({ prefilledDate: initialDate }: { prefilledDate?: string }) {
   const { isAuthenticated } = useAuth();
   const [location] = useLocation();
@@ -1572,6 +1705,7 @@ export default function Jobs({ prefilledDate: initialDate }: { prefilledDate?: s
   const [showAddJob, setShowAddJob] = useState(!!effectiveInitialDate);
   const [addJobDate, setAddJobDate] = useState<string | undefined>(effectiveInitialDate);
   const [search, setSearch] = useState("");
+  const [showPlanDay, setShowPlanDay] = useState(false);
   const { scheduleJobReminder } = useNotifications();
 
   const { data: jobsData, refetch } = trpc.jobs.list.useQuery(
@@ -1643,9 +1777,14 @@ export default function Jobs({ prefilledDate: initialDate }: { prefilledDate?: s
               {allJobs.length}
             </span>
           </div>
-          <Button size="sm" onClick={() => { setAddJobDate(undefined); setShowAddJob(true); }} className="gap-1.5">
-            <Plus size={15} /> Add Job
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button size="sm" variant="outline" onClick={() => setShowPlanDay(true)} className="gap-1.5">
+              <Link2 size={14} /> Plan Day
+            </Button>
+            <Button size="sm" onClick={() => { setAddJobDate(undefined); setShowAddJob(true); }} className="gap-1.5">
+              <Plus size={15} /> Add Job
+            </Button>
+          </div>
         </div>
 
         {/* Search */}
@@ -1776,6 +1915,9 @@ export default function Jobs({ prefilledDate: initialDate }: { prefilledDate?: s
           onClose={() => setEditJob(null)}
           onSaved={() => refetch()}
         />
+      )}
+      {showPlanDay && (
+        <PlanDaySheet jobs={allJobs} onClose={() => setShowPlanDay(false)} />
       )}
       {showAddJob && (
         <AddJobSheet

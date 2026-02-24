@@ -287,3 +287,15 @@
 - [x] UI: Chain card shows Gross / Travel cost deduction / Net breakdown
 - [x] Server: getDashboardStats dailyBreakdown merges standalone job profit + chain profit per day
 - [x] UI: Weekly chart bars now include chain profit for each day
+
+## Fix: Transit Cost Calculation Wrong
+- [x] Server: travelPlanner.planRoute rewritten to use real Google Maps transit API (not LLM)
+- [x] Server: cost per bus step = £2.50 per leg (not distance-based formula giving £12)
+- [x] Server: total cost = sum of individual step costs (walk=free, bus=£2.50, train=tiered by distance)
+- [x] Server: fallback uses correct £2.50 single bus fare if Google Maps unavailable
+
+## Feature: Quick Chain Linking from Jobs Screen
+- [x] UI: "Plan Day" button in Jobs header (next to Add Job)
+- [x] UI: Plan Day sheet shows jobs for selected date with time + earnings, tap to select
+- [x] UI: "Plan Chain" button navigates to Chain Planner with selected job IDs pre-filled
+- [x] UI: Chain Planner reads ?chainJobs= URL param and pre-selects those jobs on load
