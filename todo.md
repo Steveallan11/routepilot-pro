@@ -43,3 +43,6 @@
 - [x] TypeScript: 0 errors
 - [x] All 15 tests passing
 - [ ] Final checkpoint and delivery
+
+## Bugs
+- [ ] Sign in / sign up not working — users cannot authenticate
