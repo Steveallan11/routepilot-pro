@@ -837,6 +837,43 @@ export const chainsRouter = router({
       return { success: true };
     }),
 
+  // ── Fetch saved edits for a chain matching a set of job IDs ───────────────
+  getSavedEdits: protectedProcedure
+    .input(z.object({ jobIds: z.array(z.number()).min(1).max(3) }))
+    .query(async ({ ctx, input }) => {
+      const db = await getDb();
+      if (!db) return null;
+      // Find all chains owned by this user
+      const userChains = await db.select().from(jobChains)
+        .where(eq(jobChains.userId, ctx.user.id))
+        .orderBy(desc(jobChains.updatedAt));
+      if (userChains.length === 0) return null;
+      // For each chain, check if its job IDs match the input exactly
+      for (const chain of userChains) {
+        const cjRows = await db.select({ jobId: chainJobs.jobId })
+          .from(chainJobs).where(eq(chainJobs.chainId, chain.id));
+        const savedJobIds = cjRows.map(r => r.jobId).sort((a, b) => a - b);
+        const inputSorted = [...input.jobIds].sort((a, b) => a - b);
+        const matches = savedJobIds.length === inputSorted.length &&
+          savedJobIds.every((id, i) => id === inputSorted[i]);
+        if (matches && chain.repositionLegs) {
+          return {
+            chainId: chain.id,
+            transportLegs: chain.repositionLegs,
+            summary: {
+              totalEarnings: Number(chain.totalEarnings ?? 0),
+              totalCosts: Number(chain.totalCosts ?? 0),
+              totalNetProfit: Number(chain.totalNetProfit ?? 0),
+              totalDurationMins: Number(chain.totalDurationMins ?? 0),
+              totalDistanceMiles: Number(chain.totalDistanceMiles ?? 0),
+              profitPerHour: Number(chain.profitPerHour ?? 0),
+            },
+          };
+        }
+      }
+      return null;
+    }),
+
   // ── Generate a shareable read-only link for a chain ──────────────────────
   createShareLink: protectedProcedure
     .input(z.object({ chainId: z.number() }))

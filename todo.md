@@ -348,3 +348,10 @@
 - [x] Server: chainsPublicRouter.getShared — public procedure, returns chain by token (no auth)
 - [x] UI: "Share Plan" button in chain result — generates link and copies to clipboard
 - [x] UI: /chain/:token public read-only page showing full journey timeline with step detail
+
+## Feature: Load Saved Chain Edits on Re-open
+- [x] Server: chains.getSavedEdits procedure — find saved chain by job IDs, return transportLegs JSON + chainId
+- [x] UI: after plan mutation succeeds, query getSavedEdits for the same job IDs
+- [x] UI: if saved edits exist, merge them into the fresh plan result (overwrite transport legs)
+- [x] UI: show a toast "Restored your saved edits" when edits are applied
+- [x] UI: setSavedChainId from the loaded chain so Save Edits / Share Plan work immediately

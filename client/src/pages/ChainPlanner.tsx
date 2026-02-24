@@ -716,6 +716,8 @@ export default function ChainPlanner() {
   const [savedChainId, setSavedChainId] = useState<number | null>(null);
   const [shareLink, setShareLink] = useState<string | null>(null);
 
+  const utils = trpc.useUtils();
+
   const planMutation = trpc.chains.plan.useMutation();
   const saveChainMutation = trpc.chains.save.useMutation();
   const saveEditsMutation = trpc.chains.saveEdits.useMutation();
@@ -753,7 +755,35 @@ export default function ChainPlanner() {
         jobIds: selectedJobIds,
         legSelections: selections,
       });
-      setChainResult(result as ChainResult);
+      const freshPlan = result as ChainResult;
+
+      // Attempt to restore previously saved edits for this exact set of jobs
+      try {
+        const saved = await utils.chains.getSavedEdits.fetch({ jobIds: selectedJobIds });
+        if (saved && Array.isArray(saved.transportLegs) && saved.transportLegs.length > 0) {
+          // Merge saved legs into fresh plan: keep fresh plan structure but overwrite legs
+          const merged: ChainResult = {
+            ...freshPlan,
+            transportLegs: saved.transportLegs as ChainResult["transportLegs"],
+            summary: {
+              ...freshPlan.summary,
+              totalCosts: saved.summary.totalCosts,
+              totalNetProfit: saved.summary.totalNetProfit,
+              totalDurationMins: saved.summary.totalDurationMins,
+              profitPerHour: saved.summary.profitPerHour,
+              totalTransportCost: saved.summary.totalCosts - Number(freshPlan.summary.totalBrokerFees ?? 0),
+            },
+          };
+          setChainResult(merged);
+          setSavedChainId(saved.chainId);
+          toast.success("Restored your saved edits");
+          return;
+        }
+      } catch {
+        // Silently ignore — just use fresh plan
+      }
+
+      setChainResult(freshPlan);
     } catch {
       toast.error("Failed to plan chain. Please try again.");
     }
@@ -765,16 +795,8 @@ export default function ChainPlanner() {
       await saveSettingsMutation.mutateAsync({ homePostcode: homePostcodeInput.trim().toUpperCase() });
       await refetchSettings();
       setShowHomePrompt(false);
-      // Now plan the chain
-      try {
-        const result = await planMutation.mutateAsync({
-          jobIds: selectedJobIds,
-          legSelections,
-        });
-        setChainResult(result as ChainResult);
-      } catch {
-        toast.error("Failed to plan chain. Please try again.");
-      }
+      // Now plan the chain (reuse handlePlanChain which handles saved-edits restore)
+      await handlePlanChain(legSelections);
     } catch {
       toast.error("Failed to save home postcode");
     }
