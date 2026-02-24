@@ -1,12 +1,12 @@
 import { useLocation, Link } from "wouter";
-import { Car, Link2, History, CalendarDays, Sparkles, LogIn, User } from "lucide-react";
+import { Car, Navigation, History, CalendarDays, Sparkles, LogIn, User } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { getLoginUrl } from "@/const";
 
 const navItems = [
   { path: "/", icon: Car, label: "Calculator" },
-  { path: "/chain", icon: Link2, label: "Chain" },
+  { path: "/routes", icon: Navigation, label: "Routes" },
   { path: "/planner", icon: CalendarDays, label: "Planner" },
   { path: "/history", icon: History, label: "History" },
   { path: "/insights", icon: Sparkles, label: "AI" },

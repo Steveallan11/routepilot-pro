@@ -16,10 +16,11 @@ import {
   Car, MapPin, PoundSterling, Fuel, Clock, ChevronDown, ChevronUp,
   Save, Zap, Camera, X, CheckCircle2, AlertCircle, Loader2, Sparkles,
   Building2, Hash, Route, FileText, Plus, Trash2, Train, Receipt,
-  TrendingUp, TrendingDown, Link2
+  TrendingUp, TrendingDown, Link2, Navigation
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { calculateJobCost } from "../../../shared/routepilot-types";
+import { useLocation } from "wouter";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -857,7 +858,25 @@ export default function Home() {
 
               {/* Travel to job */}
               <div className="space-y-2">
-                <Label className="text-xs text-muted-foreground">Getting to Job 1 (from home)</Label>
+                <div className="flex items-center justify-between">
+                  <Label className="text-xs text-muted-foreground">Getting to Job 1 (from home)</Label>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="h-6 text-xs text-primary px-2 gap-1"
+                    onClick={() => {
+                      const homePostcode = travel.travelHomePostcode || "";
+                      const firstPickup = jobs[0]?.pickupPostcode || "";
+                      const params = new URLSearchParams();
+                      if (homePostcode) params.set("from", homePostcode);
+                      if (firstPickup) params.set("to", firstPickup);
+                      window.location.href = `/routes?${params.toString()}`;
+                    }}
+                  >
+                    <Navigation size={11} /> Find Route
+                  </Button>
+                </div>
                 <div className="grid grid-cols-2 gap-3">
                   <div className="relative">
                     <PoundSterling size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
@@ -878,7 +897,25 @@ export default function Home() {
 
               {/* Travel home */}
               <div className="space-y-2">
-                <Label className="text-xs text-muted-foreground">Getting home after last dropoff</Label>
+                <div className="flex items-center justify-between">
+                  <Label className="text-xs text-muted-foreground">Getting home after last dropoff</Label>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="h-6 text-xs text-primary px-2 gap-1"
+                    onClick={() => {
+                      const lastDropoff = jobs[jobs.length - 1]?.dropoffPostcode || "";
+                      const homePostcode = travel.travelHomePostcode || "";
+                      const params = new URLSearchParams();
+                      if (lastDropoff) params.set("from", lastDropoff);
+                      if (homePostcode) params.set("to", homePostcode);
+                      window.location.href = `/routes?${params.toString()}`;
+                    }}
+                  >
+                    <Navigation size={11} /> Find Route
+                  </Button>
+                </div>
                 <div className="grid grid-cols-2 gap-3">
                   <div className="relative">
                     <PoundSterling size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />

@@ -84,3 +84,14 @@
 - [x] Travel costs (to job + home) always shown in cost breakdown when non-zero
 - [x] Travel Expenses and Cost Settings use separate toggles (not same showAdvanced state)
 - [x] Cost Settings section stays collapsed by default; Travel Expenses stays open
+
+## Feature: Multi-Modal Route Finder
+- [x] Server: tRPC procedure to fetch transit routes from Google Maps Directions API (transit mode)
+- [x] Server: Also fetch driving and walking options for comparison
+- [x] Server: Rank results as fastest, cheapest, balanced — return all legs with mode, duration, cost
+- [x] Frontend: New "Routes" tab or section in Travel Expenses with from/to postcode inputs
+- [x] Frontend: Ranked route cards — Fastest / Cheapest / Balanced with duration, cost, steps summary
+- [x] Frontend: Tap a route card to open interactive map with colour-coded legs (train=blue, bus=orange, walk=green, taxi=yellow)
+- [x] Frontend: Map shows each leg as a polyline with mode icon markers at interchange points
+- [x] Frontend: "Use This Route" button on map view — auto-fills travel cost and mode in calculator
+- [x] Frontend: Add route finder button in Travel Expenses section for quick access

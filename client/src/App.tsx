@@ -11,6 +11,7 @@ import DayPlanner from "./pages/DayPlanner";
 import Settings from "./pages/Settings";
 import AIInsights from "./pages/AIInsights";
 import SharedChain from "./pages/SharedChain";
+import RouteFinder from "./pages/RouteFinder";
 import BottomNav from "./components/BottomNav";
 import { useLocation } from "wouter";
 
@@ -27,6 +28,7 @@ function Router() {
         <Route path="/planner" component={DayPlanner} />
         <Route path="/settings" component={Settings} />
         <Route path="/insights" component={AIInsights} />
+        <Route path="/routes">{() => <RouteFinder />}</Route>
         <Route path="/share/:token" component={SharedChain} />
         <Route path="/404" component={NotFound} />
         <Route component={NotFound} />
