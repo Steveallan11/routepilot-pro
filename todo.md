@@ -360,3 +360,9 @@
 - [x] Found: Plan Day was navigating to /tools?chainJobs=... but /tools is not a registered route
 - [x] Fixed: changed navigation target to /chain?chainJobs=... (the correct Chain Planner route)
 - [x] Chain Planner correctly reads ?chainJobs= param and pre-selects those jobs
+
+## Bug Fix: Chain Planner Issues
+- [x] Fix Save Chain "Failed" error — fixed try/catch structure and insertId cast in chains.save
+- [x] Fix Add to Calendar — now includes travelToJobCost and correct net profit/transport cost in notes
+- [x] Add tappable job cards in chain result — tap any drive job to open bottom sheet with full details
+- [x] Show travel/reposition leg in job detail sheet — travel summary shown in card and full step breakdown in sheet

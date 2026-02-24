@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
 import { MapView } from "@/components/Map";
@@ -179,9 +180,12 @@ type ChainJob = {
   estimatedDurationMins?: number | string | null;
   vehicleMake?: string | null;
   vehicleModel?: string | null;
+  vehicleVariant?: string | null;
   vehicleReg?: string | null;
+  vehicleColour?: string | null;
   brokerName?: string | null;
   scheduledPickupAt?: Date | string | null;
+  notes?: string | null;
 };
 
 type ChainResult = {
@@ -578,8 +582,9 @@ function TransportLegCard({
   );
 }
 
-// Drive leg card
-function DriveLegCard({ job, jobIndex }: { job: ChainJob; jobIndex: number }) {
+// Drive leg card — tappable to open mini job detail sheet
+function DriveLegCard({ job, jobIndex, travelLeg }: { job: ChainJob; jobIndex: number; travelLeg?: TransportLeg }) {
+  const [open, setOpen] = useState(false);
   const scheduledTime = job.scheduledPickupAt
     ? new Date(job.scheduledPickupAt as string | Date).toLocaleString("en-GB", {
         weekday: "short", day: "numeric", month: "short",
@@ -587,7 +592,10 @@ function DriveLegCard({ job, jobIndex }: { job: ChainJob; jobIndex: number }) {
       })
     : null;
 
+  const selectedOpt = travelLeg?.options[travelLeg.selectedOptionIndex ?? 0];
+
   return (
+    <>
     <div className="flex items-start gap-3 py-2">
       <div className="flex flex-col items-center">
         <div className="w-7 h-7 rounded-full bg-primary/20 border border-primary/30 flex items-center justify-center flex-shrink-0">
@@ -595,7 +603,10 @@ function DriveLegCard({ job, jobIndex }: { job: ChainJob; jobIndex: number }) {
         </div>
       </div>
       <div className="flex-1 min-w-0">
-        <div className="bg-primary/5 border border-primary/20 rounded-xl p-3">
+        <button
+          onClick={() => setOpen(true)}
+          className="w-full text-left bg-primary/5 border border-primary/20 rounded-xl p-3 active:bg-primary/10 transition-colors"
+        >
           <div className="flex items-center justify-between mb-1">
             <span className="text-xs font-semibold text-primary uppercase tracking-wide">Drive Job {jobIndex + 1}</span>
             <span className="text-sm font-bold font-mono text-primary">+£{fmt(job.deliveryFee)}</span>
@@ -623,9 +634,135 @@ function DriveLegCard({ job, jobIndex }: { job: ChainJob; jobIndex: number }) {
             )}
             {job.brokerName && <span>· {job.brokerName}</span>}
           </div>
-        </div>
+          {/* Travel to this job summary */}
+          {selectedOpt && (
+            <div className="mt-2 pt-2 border-t border-primary/10 flex items-center gap-2 text-xs text-muted-foreground">
+              <Navigation size={10} />
+              <span>Travel: {selectedOpt.durationMins}m · £{fmt(selectedOpt.cost)}</span>
+              <span className="text-primary/60">{selectedOpt.summary ?? selectedOpt.mode}</span>
+            </div>
+          )}
+          <div className="mt-1.5 text-right">
+            <span className="text-[10px] text-muted-foreground/60">Tap for details</span>
+          </div>
+        </button>
       </div>
     </div>
+
+    {/* Mini job detail sheet */}
+    <Sheet open={open} onOpenChange={setOpen}>
+      <SheetContent side="bottom" className="max-h-[85vh] overflow-y-auto rounded-t-2xl">
+        <SheetHeader className="mb-4">
+          <SheetTitle className="flex items-center gap-2">
+            <Car size={18} className="text-primary" />
+            Drive Job {jobIndex + 1}
+          </SheetTitle>
+        </SheetHeader>
+
+        <div className="space-y-4">
+          {/* Route */}
+          <div className="bg-secondary/60 rounded-xl p-4">
+            <p className="text-xs text-muted-foreground font-semibold uppercase tracking-wide mb-2">Route</p>
+            <div className="flex items-center gap-2 text-base font-mono font-semibold">
+              <span>{job.pickupPostcode}</span>
+              <ArrowRight size={14} className="text-muted-foreground" />
+              <span>{job.dropoffPostcode}</span>
+            </div>
+            {scheduledTime && (
+              <p className="text-sm text-primary/80 mt-1 flex items-center gap-1">
+                <Clock size={12} /> Pickup {scheduledTime}
+              </p>
+            )}
+          </div>
+
+          {/* Financials */}
+          <div className="bg-secondary/60 rounded-xl p-4">
+            <p className="text-xs text-muted-foreground font-semibold uppercase tracking-wide mb-3">Financials</p>
+            <div className="space-y-2">
+              <div className="flex justify-between text-sm">
+                <span className="text-muted-foreground">Delivery Fee</span>
+                <span className="font-mono font-semibold text-primary">+£{fmt(job.deliveryFee)}</span>
+              </div>
+              {job.estimatedNetProfit != null && (
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">Est. Net Profit</span>
+                  <span className={cn("font-mono font-semibold", Number(job.estimatedNetProfit) >= 0 ? "text-primary" : "text-destructive")}>
+                    {Number(job.estimatedNetProfit) >= 0 ? "+" : ""}£{fmt(job.estimatedNetProfit)}
+                  </span>
+                </div>
+              )}
+              {job.estimatedDistanceMiles && (
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">Distance</span>
+                  <span className="font-mono">{fmt(job.estimatedDistanceMiles, 1)} mi</span>
+                </div>
+              )}
+              {job.estimatedDurationMins && (
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">Drive Time</span>
+                  <span className="font-mono">{Math.round(Number(job.estimatedDurationMins))} min</span>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Vehicle */}
+          {(job.vehicleMake || job.vehicleReg) && (
+            <div className="bg-secondary/60 rounded-xl p-4">
+              <p className="text-xs text-muted-foreground font-semibold uppercase tracking-wide mb-2">Vehicle</p>
+              <p className="text-sm font-medium">
+                {[job.vehicleMake, job.vehicleModel, job.vehicleVariant].filter(Boolean).join(" ")}
+              </p>
+              {job.vehicleReg && <p className="text-sm font-mono text-muted-foreground">{job.vehicleReg}</p>}
+              {job.vehicleColour && <p className="text-xs text-muted-foreground">{job.vehicleColour}</p>}
+            </div>
+          )}
+
+          {/* Travel to this job */}
+          {selectedOpt && (
+            <div className="bg-secondary/60 rounded-xl p-4">
+              <p className="text-xs text-muted-foreground font-semibold uppercase tracking-wide mb-3">Travel to Pickup</p>
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-sm">{selectedOpt.summary ?? selectedOpt.mode}</span>
+                <div className="flex items-center gap-2 text-sm">
+                  <span className="text-muted-foreground">{selectedOpt.durationMins}m</span>
+                  <span className="font-mono font-semibold text-destructive">£{fmt(selectedOpt.cost)}</span>
+                </div>
+              </div>
+              {selectedOpt.steps && selectedOpt.steps.length > 0 && (
+                <div className="space-y-1.5 mt-2">
+                  {selectedOpt.steps.map((step: { mode?: string; description?: string; durationMins?: number; cost?: number }, si: number) => (
+                    <div key={si} className="flex items-center gap-2 text-xs text-muted-foreground">
+                      <span className="w-4 flex-shrink-0">{modeIcons[step.mode ?? ""] ?? <Navigation size={10} />}</span>
+                      <span className="flex-1">{step.description ?? step.mode}</span>
+                      <span>{step.durationMins}m</span>
+                      {step.cost != null && step.cost > 0 && <span className="font-mono">£{fmt(step.cost)}</span>}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Broker */}
+          {job.brokerName && (
+            <div className="bg-secondary/60 rounded-xl p-4">
+              <p className="text-xs text-muted-foreground font-semibold uppercase tracking-wide mb-1">Broker</p>
+              <p className="text-sm font-medium">{job.brokerName}</p>
+            </div>
+          )}
+
+          {/* Notes */}
+          {job.notes && (
+            <div className="bg-secondary/60 rounded-xl p-4">
+              <p className="text-xs text-muted-foreground font-semibold uppercase tracking-wide mb-1">Notes</p>
+              <p className="text-sm whitespace-pre-wrap">{job.notes}</p>
+            </div>
+          )}
+        </div>
+      </SheetContent>
+    </Sheet>
+    </>
   );
 }
 
@@ -811,6 +948,10 @@ export default function ChainPlanner() {
       ? new Date(firstJob.scheduledPickupAt as string | Date).toISOString().slice(0, 16)
       : new Date().toISOString().slice(0, 16);
     const label = chainResult.jobs.map(j => `${j.pickupPostcode}→${j.dropoffPostcode}`).join(" + ");
+    const transportCost = Number(chainResult.summary.totalTransportCost ?? chainResult.summary.totalCosts ?? 0);
+    const netProfit = Number(chainResult.summary.totalNetProfit ?? 0);
+    const durationHrs = Math.floor(Number(chainResult.summary.totalDurationMins ?? 0) / 60);
+    const durationMins = Math.round(Number(chainResult.summary.totalDurationMins ?? 0) % 60);
     try {
       await createJobMutation.mutateAsync({
         pickupPostcode: firstJob.pickupPostcode,
@@ -820,8 +961,9 @@ export default function ChainPlanner() {
         brokerFeeFixed: 0,
         brokerFeePercent: 0,
         fuelReimbursed: false,
+        travelToJobCost: transportCost,
         scheduledPickupAt: scheduledAt,
-        notes: `Chain: ${label}\nNet profit: £${fmt(chainResult.summary.totalNetProfit)}\nJobs: ${chainResult.jobs.length}`,
+        notes: `Chain: ${label}\nJobs: ${chainResult.jobs.length}\nTransport cost: £${fmt(transportCost)}\nNet profit: £${fmt(netProfit)}\nTotal time: ${durationHrs}h ${durationMins}m`,
         brokerName: "Chain",
       });
       toast.success("Chain added to Calendar!");
@@ -1101,7 +1243,7 @@ export default function ChainPlanner() {
     const items: Array<
       | { type: "homeStart"; postcode: string }
       | { type: "transport"; leg: TransportLeg; legIndex: number; label: string }
-      | { type: "drive"; job: ChainJob; jobIndex: number }
+      | { type: "drive"; job: ChainJob; jobIndex: number; travelLeg?: TransportLeg }
       | { type: "homeEnd"; postcode: string }
     > = [];
 
@@ -1119,13 +1261,16 @@ export default function ChainPlanner() {
     }
 
     // For each job: drive leg, then reposition (if not last)
+    // Track the preceding transport leg so DriveLegCard can show travel summary
+    let lastTransportLeg: TransportLeg | undefined = homeToPickup;
     for (let i = 0; i < result.jobs.length; i++) {
-      items.push({ type: "drive", job: result.jobs[i]!, jobIndex: i });
+      items.push({ type: "drive", job: result.jobs[i]!, jobIndex: i, travelLeg: lastTransportLeg });
 
       if (i < result.jobs.length - 1) {
         const repoLeg = result.transportLegs.find((l, li) => l.legType === "reposition" && li === transportLegIndex);
         if (repoLeg) {
           items.push({ type: "transport", leg: repoLeg, legIndex: transportLegIndex++, label: `Reposition to Job ${i + 2}` });
+          lastTransportLeg = repoLeg;
         }
       }
     }
@@ -1325,7 +1470,7 @@ export default function ChainPlanner() {
                     }
                     if (item.type === "drive") {
                       return (
-                        <DriveLegCard key={idx} job={item.job} jobIndex={item.jobIndex} />
+                        <DriveLegCard key={idx} job={item.job} jobIndex={item.jobIndex} travelLeg={item.travelLeg} />
                       );
                     }
                     return null;

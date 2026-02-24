@@ -670,30 +670,34 @@ export const chainsRouter = router({
     .mutation(async ({ ctx, input }) => {
       const db = await getDb();
       if (!db) throw new Error("Database unavailable");
-
-      const [insertResult] = await db.insert(jobChains).values({
-        userId: ctx.user.id,
-        name: input.name ?? `Chain ${new Date().toLocaleDateString("en-GB")}`,
-        status: "planned",
-        totalEarnings: 0,
-        totalCosts: 0,
-        totalNetProfit: 0,
-        totalDistanceMiles: 0,
-        totalDurationMins: 0,
-      });
-
-      const chainDbId = (insertResult as unknown as { insertId: number }).insertId;
-
-      // Link jobs to the chain
-      for (let pos = 0; pos < input.jobIds.length; pos++) {
-        await db.insert(chainJobs).values({
-          chainId: chainDbId,
-          jobId: input.jobIds[pos]!,
-          position: pos + 1,
+      try {
+        const [insertResult] = await db.insert(jobChains).values({
+          userId: ctx.user.id,
+          name: input.name ?? `Chain ${new Date().toLocaleDateString("en-GB")}`,
+          status: "planned",
+          totalEarnings: 0,
+          totalCosts: 0,
+          totalNetProfit: 0,
+          totalDistanceMiles: 0,
+          totalDurationMins: 0,
         });
-      }
 
-      return { success: true, chainId: chainDbId };
+        const chainDbId = (insertResult as { insertId: number }).insertId;
+
+        // Link jobs to the chain
+        for (let pos = 0; pos < input.jobIds.length; pos++) {
+          await db.insert(chainJobs).values({
+            chainId: chainDbId,
+            jobId: input.jobIds[pos]!,
+            position: pos + 1,
+          });
+        }
+
+        return { success: true, chainId: chainDbId };
+      } catch (err) {
+        console.error("[Chains.save] Error:", err);
+        throw err;
+      }
     }),
 
   // Mark a chain and all its jobs as completed
@@ -937,9 +941,13 @@ export const chainsPublicRouter = router({
           estimatedDurationMins: Number(j.estimatedDurationMins ?? 0),
           vehicleMake: j.vehicleMake,
           vehicleModel: j.vehicleModel,
+          vehicleVariant: null,
           vehicleReg: j.vehicleReg,
+          vehicleColour: j.vehicleColour ?? null,
           brokerName: j.brokerName,
           scheduledPickupAt: j.scheduledPickupAt,
+          notes: j.notes,
+          estimatedNetProfit: j.estimatedNetProfit != null ? Number(j.estimatedNetProfit) : null,
         })),
       };
     }),

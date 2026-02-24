@@ -1,0 +1,40 @@
+{
+  "query": "SHOW TABLES LIKE 'chain_jobs'; DESCRIBE chain_jobs;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway02.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 29dmg1z8s7MGkda.cd2f01f00c99 --database 6VTDyDwMUZs22XSbYJviE3 --execute SHOW TABLES LIKE 'chain_jobs'; DESCRIBE chain_jobs;",
+  "rows": [
+    {
+      "Tables_in_6VTDyDwMUZs22XSbYJviE3 (chain_jobs)": "chain_jobs"
+    },
+    {
+      "Tables_in_6VTDyDwMUZs22XSbYJviE3 (chain_jobs)": "Field\tType\tNull\tKey\tDefault\tExtra"
+    },
+    {
+      "Tables_in_6VTDyDwMUZs22XSbYJviE3 (chain_jobs)": "id\tint(11)\tNO\tPRI\tNULL\tauto_increment"
+    },
+    {
+      "Tables_in_6VTDyDwMUZs22XSbYJviE3 (chain_jobs)": "chainId\tint(11)\tNO\t\tNULL\t"
+    },
+    {
+      "Tables_in_6VTDyDwMUZs22XSbYJviE3 (chain_jobs)": "jobId\tint(11)\tNO\t\tNULL\t"
+    },
+    {
+      "Tables_in_6VTDyDwMUZs22XSbYJviE3 (chain_jobs)": "position\tint(11)\tNO\t\tNULL\t"
+    },
+    {
+      "Tables_in_6VTDyDwMUZs22XSbYJviE3 (chain_jobs)": "repositionCost\tfloat\tYES\t\tNULL\t"
+    },
+    {
+      "Tables_in_6VTDyDwMUZs22XSbYJviE3 (chain_jobs)": "repositionDurationMins\tfloat\tYES\t\tNULL\t"
+    },
+    {
+      "Tables_in_6VTDyDwMUZs22XSbYJviE3 (chain_jobs)": "repositionMode\tenum('train','bus','tram','taxi','walk','scooter','drive','none')\tYES\t\tNULL\t"
+    },
+    {
+      "Tables_in_6VTDyDwMUZs22XSbYJviE3 (chain_jobs)": "repositionData\tjson\tYES\t\tNULL\t"
+    }
+  ],
+  "messages": [],
+  "stdout": "Tables_in_6VTDyDwMUZs22XSbYJviE3 (chain_jobs)\nchain_jobs\nField\tType\tNull\tKey\tDefault\tExtra\nid\tint(11)\tNO\tPRI\tNULL\tauto_increment\nchainId\tint(11)\tNO\t\tNULL\t\njobId\tint(11)\tNO\t\tNULL\t\nposition\tint(11)\tNO\t\tNULL\t\nrepositionCost\tfloat\tYES\t\tNULL\t\nrepositionDurationMins\tfloat\tYES\t\tNULL\t\nrepositionMode\tenum('train','bus','tram','taxi','walk','scooter','drive','none')\tYES\t\tNULL\t\nrepositionData\tjson\tYES\t\tNULL\t\n",
+  "stderr": "",
+  "execution_time_ms": 93
+}
