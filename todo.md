@@ -78,3 +78,9 @@
 - [x] Receipt scanner: attach receipts to a job, show in job history
 - [x] DB: receipts table (already exists — extend with AI scan fields)
 - [x] History: show receipts attached to each job
+
+## Fix: Travel Expenses visibility
+- [x] Travel Expenses section: always visible, not hidden behind collapse toggle
+- [x] Travel costs (to job + home) always shown in cost breakdown when non-zero
+- [x] Travel Expenses and Cost Settings use separate toggles (not same showAdvanced state)
+- [x] Cost Settings section stays collapsed by default; Travel Expenses stays open

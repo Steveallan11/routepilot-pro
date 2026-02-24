@@ -168,7 +168,8 @@ export default function Home() {
     enableTimeValue: true,
     enableWearTear: true,
   });
-  const [showAdvanced, setShowAdvanced] = useState(false);
+  const [showTravelExpenses, setShowTravelExpenses] = useState(true);
+  const [showCostSettings, setShowCostSettings] = useState(false);
   const [showVehicleDetails, setShowVehicleDetails] = useState<string | null>(null);
   const [results, setResults] = useState<Array<{
     jobId: string;
@@ -834,7 +835,7 @@ export default function Home() {
 
         {/* Travel Expenses */}
         <Card className="bg-card border-border">
-          <CardHeader className="pb-2 cursor-pointer" onClick={() => setShowAdvanced(s => !s)}>
+          <CardHeader className="pb-2 cursor-pointer" onClick={() => setShowTravelExpenses(s => !s)}>
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <Train size={14} className="text-muted-foreground" />
@@ -847,10 +848,10 @@ export default function Home() {
                   </Badge>
                 )}
               </div>
-              {showAdvanced ? <ChevronUp size={16} className="text-muted-foreground" /> : <ChevronDown size={16} className="text-muted-foreground" />}
+              {showTravelExpenses ? <ChevronUp size={16} className="text-muted-foreground" /> : <ChevronDown size={16} className="text-muted-foreground" />}
             </div>
           </CardHeader>
-          {showAdvanced && (
+          {showTravelExpenses && (
             <CardContent className="space-y-4">
               <p className="text-xs text-muted-foreground">Cost to get to the first job and home (or to your next job) after the last dropoff. These are deducted from your total profit.</p>
 
@@ -907,15 +908,15 @@ export default function Home() {
 
         {/* Vehicle & Cost Settings */}
         <Card className="bg-card border-border">
-          <CardHeader className="pb-2 cursor-pointer" onClick={() => setShowAdvanced(s => !s)}>
+          <CardHeader className="pb-2 cursor-pointer" onClick={() => setShowCostSettings(s => !s)}>
             <div className="flex items-center justify-between">
               <CardTitle className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
                 Cost Settings
               </CardTitle>
-              {showAdvanced ? <ChevronUp size={16} className="text-muted-foreground" /> : <ChevronDown size={16} className="text-muted-foreground" />}
+              {showCostSettings ? <ChevronUp size={16} className="text-muted-foreground" /> : <ChevronDown size={16} className="text-muted-foreground" />}
             </div>
           </CardHeader>
-          {showAdvanced && (
+          {showCostSettings && (
             <CardContent className="space-y-4">
               <div>
                 <div className="flex justify-between mb-2">
