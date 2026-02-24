@@ -5,13 +5,155 @@ import { motion, AnimatePresence } from "framer-motion";
 import {
   TrendingUp, MapPin, Clock, Zap, Star, Flame, Trophy,
   ChevronRight, RefreshCw, Navigation, Car, Calendar,
-  ArrowRight, Sparkles, Target, Award
+  ArrowRight, Sparkles, Target, Award, Fuel, Train, Building2,
+  Hash, CheckCircle2, XCircle, Circle
 } from "lucide-react";
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import { Separator } from "@/components/ui/separator";
+import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
+import { toast } from "sonner";
 import { useMemo, useState } from "react";
 import { useLocation } from "wouter";
 import {
   BarChart, Bar, XAxis, YAxis, ResponsiveContainer, Tooltip, Cell
 } from "recharts";
+
+// ─── Next Job Detail Sheet ───────────────────────────────────────────────────
+
+function NextJobDetailSheet({ job, onClose }: { job: any; onClose: () => void }) {
+  const [, navigate] = useLocation();
+  const utils = trpc.useUtils();
+  const updateMutation = trpc.jobs.update.useMutation({
+    onSuccess: () => { utils.dashboard.nextJob.invalidate(); onClose(); },
+  });
+
+  const netProfit = job.actualNetProfit ?? job.estimatedNetProfit ?? 0;
+  const brokerFee = ((job.deliveryFee * (job.brokerFeePercent ?? 0)) / 100) + (job.brokerFeeFixed ?? 0);
+  const travelCost = (job.travelToJobCost ?? 0) + (job.travelHomeCost ?? 0);
+
+  return (
+    <Sheet open onOpenChange={(o) => !o && onClose()}>
+      <SheetContent side="bottom" className="h-[90dvh] overflow-y-auto rounded-t-2xl px-0">
+        <SheetHeader className="px-4 pb-3 border-b border-border">
+          <div className="flex items-center justify-between">
+            <SheetTitle className="text-base font-bold">
+              {job.pickupPostcode} → {job.dropoffPostcode}
+            </SheetTitle>
+            <span className="text-xs bg-green-500/20 text-green-400 px-2 py-0.5 rounded-full font-medium">
+              in {timeUntil(job.scheduledPickupAt)}
+            </span>
+          </div>
+          {job.scheduledPickupAt && (
+            <p className="text-xs text-muted-foreground mt-1">
+              {new Date(job.scheduledPickupAt).toLocaleString("en-GB", { weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}
+            </p>
+          )}
+        </SheetHeader>
+
+        <div className="px-4 pt-4 space-y-4">
+          {/* Net profit hero */}
+          <div className="bg-secondary rounded-2xl p-4 flex items-center justify-between">
+            <div>
+              <p className="text-xs text-muted-foreground mb-0.5">Net Profit</p>
+              <p className={cn("text-3xl font-bold font-mono", netProfit >= 0 ? "text-primary" : "text-destructive")}>
+                {netProfit >= 0 ? "+" : ""}£{netProfit.toFixed(2)}
+              </p>
+            </div>
+            <div className="text-right space-y-1">
+              {job.estimatedDistanceMiles && <p className="text-xs text-muted-foreground">{Number(job.estimatedDistanceMiles).toFixed(1)} mi</p>}
+              {job.estimatedDurationMins && <p className="text-xs text-muted-foreground">{Math.floor(job.estimatedDurationMins / 60)}h {Math.round(job.estimatedDurationMins % 60)}m</p>}
+            </div>
+          </div>
+
+          {/* Cost breakdown */}
+          <div className="space-y-2">
+            <p className="text-xs text-muted-foreground uppercase tracking-wide font-medium">Breakdown</p>
+            <div className="space-y-1.5 text-sm">
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Delivery Fee</span>
+                <span className="font-mono text-primary">+£{Number(job.deliveryFee).toFixed(2)}</span>
+              </div>
+              {(job.estimatedFuelCost ?? 0) > 0 && (
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground flex items-center gap-1">
+                    <Fuel size={11} /> Fuel Cost <span className="text-xs text-blue-400">(claimed back)</span>
+                  </span>
+                  <span className="font-mono text-muted-foreground">£{Number(job.estimatedFuelCost).toFixed(2)}</span>
+                </div>
+              )}
+              {brokerFee > 0 && (
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Broker Fee</span>
+                  <span className="font-mono">-£{brokerFee.toFixed(2)}</span>
+                </div>
+              )}
+              {travelCost > 0 && (
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground flex items-center gap-1"><Train size={11} /> Travel Expenses</span>
+                  <span className="font-mono">-£{travelCost.toFixed(2)}</span>
+                </div>
+              )}
+              <Separator className="my-1" />
+              <div className="flex justify-between font-semibold">
+                <span>Net Profit</span>
+                <span className={cn("font-mono", netProfit >= 0 ? "text-primary" : "text-destructive")}>
+                  {netProfit >= 0 ? "+" : ""}£{netProfit.toFixed(2)}
+                </span>
+              </div>
+            </div>
+          </div>
+
+          {/* Job sheet info */}
+          {(job.brokerName || job.jobReference || job.vehicleReg) && (
+            <div className="space-y-2">
+              <p className="text-xs text-muted-foreground uppercase tracking-wide font-medium">Job Sheet</p>
+              <div className="space-y-1.5 text-sm">
+                {job.brokerName && (
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground flex items-center gap-1"><Building2 size={11} /> Broker</span>
+                    <span className="font-medium">{job.brokerName}</span>
+                  </div>
+                )}
+                {job.jobReference && (
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground flex items-center gap-1"><Hash size={11} /> Reference</span>
+                    <span className="font-mono text-xs">{job.jobReference}</span>
+                  </div>
+                )}
+                {job.vehicleReg && (
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground flex items-center gap-1"><Car size={11} /> Vehicle</span>
+                    <span className="font-mono text-xs uppercase">{job.vehicleReg}</span>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Actions */}
+          <div className="flex gap-2 pt-2">
+            <Button
+              variant="outline"
+              className="flex-1"
+              onClick={() => { navigate(`/routes?from=${job.pickupPostcode}`); onClose(); }}
+            >
+              <Navigation size={14} className="mr-1.5" /> Route
+            </Button>
+            <Button
+              className="flex-1"
+              onClick={() => updateMutation.mutate({ id: job.id, status: "active" })}
+              disabled={updateMutation.isPending || job.status === "active"}
+            >
+              <CheckCircle2 size={14} className="mr-1.5" />
+              {job.status === "active" ? "Active" : "Start Job"}
+            </Button>
+          </div>
+        </div>
+      </SheetContent>
+    </Sheet>
+  );
+}
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -85,6 +227,7 @@ function StreakWidget({ streak }: { streak: { currentStreak: number; longestStre
 
 function NextJobWidget({ job }: { job: any | null }) {
   const [, navigate] = useLocation();
+  const [showDetail, setShowDetail] = useState(false);
 
   if (!job) {
     return (
@@ -97,7 +240,7 @@ function NextJobWidget({ job }: { job: any | null }) {
           No jobs planned yet
           <div className="mt-2">
             <button
-              onClick={() => navigate("/")}
+              onClick={() => navigate("/jobs")}
               className="text-green-400 text-xs underline"
             >
               Add a job →
@@ -109,42 +252,48 @@ function NextJobWidget({ job }: { job: any | null }) {
   }
 
   return (
-    <div className="bg-gradient-to-br from-green-500/15 to-emerald-500/5 border border-green-500/30 rounded-2xl p-4">
-      <div className="flex items-center justify-between mb-3">
-        <div className="flex items-center gap-2 text-green-400 text-xs font-medium uppercase tracking-wide">
-          <Navigation size={12} />
-          Next Job
-        </div>
-        <div className="bg-green-500/20 text-green-300 text-xs px-2 py-0.5 rounded-full font-medium">
-          in {timeUntil(job.scheduledPickupAt)}
-        </div>
-      </div>
-      <div className="flex items-center gap-2 text-white font-semibold text-base mb-2">
-        <MapPin size={14} className="text-green-400 shrink-0" />
-        {job.pickupPostcode}
-        <ArrowRight size={14} className="text-gray-500" />
-        {job.dropoffPostcode}
-      </div>
-      <div className="flex items-center gap-4 text-sm text-gray-400">
-        <span className="flex items-center gap-1">
-          <Car size={12} />
-          {job.brokerName || "Delivery"}
-        </span>
-        {job.estimatedDistanceMiles && (
-          <span>{Number(job.estimatedDistanceMiles).toFixed(0)} mi</span>
-        )}
-        {job.estimatedNetProfit && (
-          <span className="text-green-400 font-medium">{fmtGbp(Number(job.estimatedNetProfit))}</span>
-        )}
-      </div>
+    <>
       <button
-        onClick={() => navigate("/routes")}
-        className="mt-3 w-full bg-green-500/20 hover:bg-green-500/30 text-green-300 text-sm py-2 rounded-xl flex items-center justify-center gap-2 transition-colors"
+        onClick={() => setShowDetail(true)}
+        className="w-full text-left bg-gradient-to-br from-green-500/15 to-emerald-500/5 border border-green-500/30 rounded-2xl p-4 hover:border-green-400/50 transition-colors"
       >
-        <Navigation size={14} />
-        Find route to pickup
+        <div className="flex items-center justify-between mb-3">
+          <div className="flex items-center gap-2 text-green-400 text-xs font-medium uppercase tracking-wide">
+            <Navigation size={12} />
+            Next Job
+          </div>
+          <div className="flex items-center gap-2">
+            <div className="bg-green-500/20 text-green-300 text-xs px-2 py-0.5 rounded-full font-medium">
+              in {timeUntil(job.scheduledPickupAt)}
+            </div>
+            <ChevronRight size={14} className="text-green-400/60" />
+          </div>
+        </div>
+        <div className="flex items-center gap-2 text-white font-semibold text-base mb-2">
+          <MapPin size={14} className="text-green-400 shrink-0" />
+          {job.pickupPostcode}
+          <ArrowRight size={14} className="text-gray-500" />
+          {job.dropoffPostcode}
+        </div>
+        <div className="flex items-center gap-4 text-sm text-gray-400">
+          <span className="flex items-center gap-1">
+            <Car size={12} />
+            {job.brokerName || "Delivery"}
+          </span>
+          {job.estimatedDistanceMiles && (
+            <span>{Number(job.estimatedDistanceMiles).toFixed(0)} mi</span>
+          )}
+          {job.estimatedNetProfit && (
+            <span className="text-green-400 font-medium">{fmtGbp(Number(job.estimatedNetProfit))}</span>
+          )}
+        </div>
       </button>
-    </div>
+
+      {/* Inline job detail sheet */}
+      {showDetail && (
+        <NextJobDetailSheet job={job} onClose={() => setShowDetail(false)} />
+      )}
+    </>
   );
 }
 

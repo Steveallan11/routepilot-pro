@@ -166,3 +166,8 @@
 - [x] Integrate route finder into Jobs detail / Add Job flow (remove standalone /routes from nav)
 - [x] Update BottomNav to new 5-tab structure (Home, Calendar, Jobs, Tools, Me)
 - [x] Update App.tsx routes
+
+## UX Improvements (Round 2)
+- [x] Calendar: "+" button pre-fills scheduled date/time from tapped slot/day
+- [x] Jobs: swipe-right to mark Started, swipe-left to Cancel
+- [x] Dashboard: "Next Job" card taps into full job detail sheet

@@ -9,7 +9,7 @@ import { getLoginUrl } from "@/const";
 import {
   CalendarDays, ChevronLeft, ChevronRight, MapPin, Clock, PoundSterling,
   Car, CheckCircle2, AlertCircle, Circle, XCircle, Train, Building2,
-  Hash, FileText, Fuel, TrendingDown, Navigation
+  Hash, FileText, Fuel, TrendingDown, Navigation, Plus
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useLocation } from "wouter";
@@ -573,6 +573,31 @@ export default function Calendar() {
     setCurrentDate(d);
   }
 
+  // Format a Date to datetime-local string for pre-filling
+  function toDatetimeLocal(d: Date): string {
+    const pad = (n: number) => String(n).padStart(2, "0");
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  }
+
+  function handleAddJobFromCalendar() {
+    // Build a pre-filled datetime: use currentDate at the nearest future half-hour
+    const base = new Date(currentDate);
+    if (view === "day") {
+      // Round up to next half-hour from now if today, else default to 09:00
+      const now = new Date();
+      if (isSameDay(base, now)) {
+        const mins = now.getMinutes();
+        base.setHours(now.getHours(), mins < 30 ? 30 : 0, 0, 0);
+        if (mins >= 30) base.setHours(base.getHours() + 1);
+      } else {
+        base.setHours(9, 0, 0, 0);
+      }
+    } else {
+      base.setHours(9, 0, 0, 0);
+    }
+    navigate(`/jobs?date=${encodeURIComponent(toDatetimeLocal(base))}`);
+  }
+
   function getWeekStart(d: Date) {
     const day = new Date(d);
     const dow = (day.getDay() + 6) % 7; // Mon=0
@@ -621,12 +646,21 @@ export default function Calendar() {
             </div>
             <h1 className="text-lg font-bold">Calendar</h1>
           </div>
-          <button
-            onClick={() => setCurrentDate(new Date())}
-            className="text-xs text-primary font-medium px-2 py-1 rounded-lg bg-primary/10"
-          >
-            Today
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setCurrentDate(new Date())}
+              className="text-xs text-primary font-medium px-2 py-1 rounded-lg bg-primary/10"
+            >
+              Today
+            </button>
+            <button
+              onClick={handleAddJobFromCalendar}
+              className="w-7 h-7 rounded-lg bg-primary flex items-center justify-center hover:bg-primary/90 transition-colors"
+              title="Add job"
+            >
+              <Plus size={15} className="text-primary-foreground" />
+            </button>
+          </div>
         </div>
 
         {/* View switcher */}

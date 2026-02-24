@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useMemo } from "react";
 import { trpc } from "@/lib/trpc";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { Button } from "@/components/ui/button";
@@ -378,7 +378,7 @@ function JobDetailSheet({ job, onClose, onStatusChange, onDelete }: {
 
 // ─── Add Job Sheet (inline calculator) ───────────────────────────────────────
 
-function AddJobSheet({ onClose, onSaved }: { onClose: () => void; onSaved: () => void }) {
+function AddJobSheet({ onClose, onSaved, prefilledDate }: { onClose: () => void; onSaved: () => void; prefilledDate?: string }) {
   const { isAuthenticated } = useAuth();
   const [pickup, setPickup] = useState("");
   const [dropoff, setDropoff] = useState("");
@@ -388,7 +388,7 @@ function AddJobSheet({ onClose, onSaved }: { onClose: () => void; onSaved: () =>
   const [brokerFeePercent, setBrokerFeePercent] = useState("0");
   const [brokerName, setBrokerName] = useState("");
   const [jobRef, setJobRef] = useState("");
-  const [scheduledDate, setScheduledDate] = useState("");
+  const [scheduledDate, setScheduledDate] = useState(prefilledDate ?? "");
   const [travelToJob, setTravelToJob] = useState("0");
   const [travelToJobMode, setTravelToJobMode] = useState("none");
   const [travelHome, setTravelHome] = useState("0");
@@ -732,57 +732,126 @@ function AddJobSheet({ onClose, onSaved }: { onClose: () => void; onSaved: () =>
 
 // ─── Job List Item ────────────────────────────────────────────────────────────
 
-function JobListItem({ job, onClick }: { job: Job; onClick: () => void }) {
+function JobListItem({ job, onClick, onSwipeRight, onSwipeLeft }: {
+  job: Job;
+  onClick: () => void;
+  onSwipeRight?: () => void;
+  onSwipeLeft?: () => void;
+}) {
   const cfg = STATUS_CONFIG[job.status];
   const StatusIcon = cfg.icon;
   const netProfit = job.actualNetProfit ?? job.estimatedNetProfit ?? 0;
 
+  // Swipe gesture state
+  const touchStartX = useRef<number | null>(null);
+  const [swipeX, setSwipeX] = useState(0);
+  const [swiping, setSwiping] = useState(false);
+  const THRESHOLD = 72;
+
+  function handleTouchStart(e: React.TouchEvent) {
+    touchStartX.current = e.touches[0]!.clientX;
+    setSwiping(true);
+  }
+
+  function handleTouchMove(e: React.TouchEvent) {
+    if (touchStartX.current === null) return;
+    const dx = e.touches[0]!.clientX - touchStartX.current;
+    setSwipeX(Math.max(-THRESHOLD * 1.2, Math.min(THRESHOLD * 1.2, dx)));
+  }
+
+  function handleTouchEnd() {
+    if (swipeX > THRESHOLD && onSwipeRight) {
+      onSwipeRight();
+    } else if (swipeX < -THRESHOLD && onSwipeLeft) {
+      onSwipeLeft();
+    }
+    setSwipeX(0);
+    setSwiping(false);
+    touchStartX.current = null;
+  }
+
+  // Determine swipe action labels
+  const swipeRightLabel = job.status === "planned" ? "Start" : job.status === "active" ? "Done" : null;
+  const swipeLeftLabel = job.status !== "cancelled" && job.status !== "completed" ? "Cancel" : null;
+
   return (
-    <button
-      onClick={onClick}
-      className="w-full text-left bg-card border border-border rounded-2xl p-4 hover:border-primary/30 transition-colors"
-    >
-      <div className="flex items-start justify-between gap-3">
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2 mb-1">
-            <div className={cn("w-1.5 h-1.5 rounded-full shrink-0", cfg.dot)} />
-            <span className="text-base font-bold text-foreground truncate">
-              {job.pickupPostcode} → {job.dropoffPostcode}
-            </span>
+    <div className="relative overflow-hidden rounded-2xl">
+      {/* Swipe action backgrounds */}
+      {swipeRightLabel && (
+        <div className={cn(
+          "absolute inset-y-0 left-0 flex items-center px-5 rounded-2xl transition-opacity",
+          "bg-primary/20",
+          swipeX > 20 ? "opacity-100" : "opacity-0"
+        )}>
+          <CheckCircle2 size={18} className="text-primary mr-1.5" />
+          <span className="text-xs font-bold text-primary">{swipeRightLabel}</span>
+        </div>
+      )}
+      {swipeLeftLabel && (
+        <div className={cn(
+          "absolute inset-y-0 right-0 flex items-center px-5 rounded-2xl transition-opacity",
+          "bg-red-500/20",
+          swipeX < -20 ? "opacity-100" : "opacity-0"
+        )}>
+          <span className="text-xs font-bold text-red-400">{swipeLeftLabel}</span>
+          <XCircle size={18} className="text-red-400 ml-1.5" />
+        </div>
+      )}
+
+      {/* Card */}
+      <button
+        onClick={onClick}
+        onTouchStart={handleTouchStart}
+        onTouchMove={handleTouchMove}
+        onTouchEnd={handleTouchEnd}
+        style={{
+          transform: swiping ? `translateX(${swipeX}px)` : "translateX(0)",
+          transition: swiping ? "none" : "transform 0.2s ease",
+        }}
+        className="w-full text-left bg-card border border-border rounded-2xl p-4 hover:border-primary/30 transition-colors relative z-10"
+      >
+        <div className="flex items-start justify-between gap-3">
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2 mb-1">
+              <div className={cn("w-1.5 h-1.5 rounded-full shrink-0", cfg.dot)} />
+              <span className="text-base font-bold text-foreground truncate">
+                {job.pickupPostcode} → {job.dropoffPostcode}
+              </span>
+            </div>
+            <div className="flex items-center gap-3 text-xs text-muted-foreground">
+              {job.estimatedDistanceMiles && (
+                <span className="flex items-center gap-0.5">
+                  <Navigation size={10} /> {job.estimatedDistanceMiles.toFixed(1)} mi
+                </span>
+              )}
+              {job.estimatedDurationMins && (
+                <span className="flex items-center gap-0.5">
+                  <Clock size={10} /> {Math.floor(job.estimatedDurationMins / 60)}h {Math.round(job.estimatedDurationMins % 60)}m
+                </span>
+              )}
+              {job.brokerName && (
+                <span className="flex items-center gap-0.5 truncate">
+                  <Building2 size={10} /> {job.brokerName}
+                </span>
+              )}
+            </div>
+            {job.scheduledPickupAt && (
+              <p className="text-xs text-muted-foreground mt-1 flex items-center gap-1">
+                <CalendarDays size={10} />
+                {new Date(job.scheduledPickupAt).toLocaleString("en-GB", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}
+              </p>
+            )}
           </div>
-          <div className="flex items-center gap-3 text-xs text-muted-foreground">
-            {job.estimatedDistanceMiles && (
-              <span className="flex items-center gap-0.5">
-                <Navigation size={10} /> {job.estimatedDistanceMiles.toFixed(1)} mi
-              </span>
-            )}
-            {job.estimatedDurationMins && (
-              <span className="flex items-center gap-0.5">
-                <Clock size={10} /> {Math.floor(job.estimatedDurationMins / 60)}h {Math.round(job.estimatedDurationMins % 60)}m
-              </span>
-            )}
-            {job.brokerName && (
-              <span className="flex items-center gap-0.5 truncate">
-                <Building2 size={10} /> {job.brokerName}
-              </span>
-            )}
-          </div>
-          {job.scheduledPickupAt && (
-            <p className="text-xs text-muted-foreground mt-1 flex items-center gap-1">
-              <CalendarDays size={10} />
-              {new Date(job.scheduledPickupAt).toLocaleString("en-GB", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}
+          <div className="text-right shrink-0 space-y-1">
+            <p className="text-lg font-bold font-mono text-primary">£{job.deliveryFee.toFixed(0)}</p>
+            <p className={cn("text-xs font-mono", netProfit >= 0 ? "text-primary/70" : "text-destructive")}>
+              {netProfit >= 0 ? "+" : ""}£{netProfit.toFixed(0)} net
             </p>
-          )}
+            <WorthItBadge score={job.worthItScore} />
+          </div>
         </div>
-        <div className="text-right shrink-0 space-y-1">
-          <p className="text-lg font-bold font-mono text-primary">£{job.deliveryFee.toFixed(0)}</p>
-          <p className={cn("text-xs font-mono", netProfit >= 0 ? "text-primary/70" : "text-destructive")}>
-            {netProfit >= 0 ? "+" : ""}£{netProfit.toFixed(0)} net
-          </p>
-          <WorthItBadge score={job.worthItScore} />
-        </div>
-      </div>
-    </button>
+      </button>
+    </div>
   );
 }
 
@@ -796,11 +865,22 @@ const STATUS_TABS: { key: JobStatus | "all"; label: string }[] = [
   { key: "cancelled", label: "Cancelled" },
 ];
 
-export default function Jobs() {
+export default function Jobs({ prefilledDate: initialDate }: { prefilledDate?: string }) {
   const { isAuthenticated } = useAuth();
+  const [location] = useLocation();
+
+  // Read ?date= query param from URL (set by Calendar + button)
+  const urlDate = useMemo(() => {
+    const params = new URLSearchParams(window.location.search);
+    return params.get("date") ?? undefined;
+  }, [location]);
+
+  const effectiveInitialDate = initialDate ?? urlDate;
+
   const [activeTab, setActiveTab] = useState<JobStatus | "all">("all");
   const [selectedJob, setSelectedJob] = useState<Job | null>(null);
-  const [showAddJob, setShowAddJob] = useState(false);
+  const [showAddJob, setShowAddJob] = useState(!!effectiveInitialDate);
+  const [addJobDate, setAddJobDate] = useState<string | undefined>(effectiveInitialDate);
   const [search, setSearch] = useState("");
 
   const { data: jobsData, refetch } = trpc.jobs.list.useQuery(
@@ -868,7 +948,7 @@ export default function Jobs() {
               {allJobs.length}
             </span>
           </div>
-          <Button size="sm" onClick={() => setShowAddJob(true)} className="gap-1.5">
+          <Button size="sm" onClick={() => { setAddJobDate(undefined); setShowAddJob(true); }} className="gap-1.5">
             <Plus size={15} /> Add Job
           </Button>
         </div>
@@ -956,9 +1036,26 @@ export default function Jobs() {
             )}
           </div>
         ) : (
-          filteredJobs.map(job => (
-            <JobListItem key={job.id} job={job} onClick={() => setSelectedJob(job)} />
-          ))
+          filteredJobs.map(job => {
+            // Swipe right → advance status; swipe left → cancel
+            const nextStatus = job.status === "planned" ? "active" : job.status === "active" ? "completed" : null;
+            const canCancel = job.status !== "cancelled" && job.status !== "completed";
+            return (
+            <JobListItem
+              key={job.id}
+              job={job}
+              onClick={() => setSelectedJob(job)}
+              onSwipeRight={nextStatus ? () => {
+                updateMutation.mutate({ id: job.id, status: nextStatus });
+                toast.success(nextStatus === "active" ? "Job started" : "Job completed");
+              } : undefined}
+              onSwipeLeft={canCancel ? () => {
+                updateMutation.mutate({ id: job.id, status: "cancelled" });
+                toast.success("Job cancelled");
+              } : undefined}
+            />
+            );
+          })
         )}
       </div>
 
@@ -972,7 +1069,7 @@ export default function Jobs() {
         />
       )}
       {showAddJob && (
-        <AddJobSheet onClose={() => setShowAddJob(false)} onSaved={() => refetch()} />
+        <AddJobSheet onClose={() => { setShowAddJob(false); setAddJobDate(undefined); }} onSaved={() => refetch()} prefilledDate={addJobDate} />
       )}
     </div>
   );

@@ -45,7 +45,7 @@ function Router() {
         {/* Primary 5-tab routes */}
         <Route path="/dashboard" component={Dashboard} />
         <Route path="/calendar" component={Calendar} />
-        <Route path="/jobs" component={Jobs} />
+        <Route path="/jobs">{() => <Jobs />}</Route>
 
         {/* Tools (accessible from Tools drawer) */}
         <Route path="/routes">{() => <RouteFinder />}</Route>
