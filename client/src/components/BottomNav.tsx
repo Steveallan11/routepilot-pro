@@ -16,7 +16,6 @@ const primaryNav = [
   { path: "/dashboard", icon: LayoutDashboard, label: "Home" },
   { path: "/calendar", icon: CalendarDays, label: "Calendar" },
   { path: "/jobs", icon: Briefcase, label: "Jobs" },
-  { path: "/tools", icon: Wrench, label: "Tools" },
 ];
 
 // ─── Tools drawer items ───────────────────────────────────────────────────────

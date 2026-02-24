@@ -192,3 +192,6 @@
 - [x] Fix insertId extraction: use .values({...}).$returningId() (correct Drizzle chain order)
 - [x] Add defensive try/catch in scheduleJobReminder (iOS Safari / browsers without Notification API)
 - [x] Wrap onSaved reminder call in try/catch so job save never crashes even if notifications fail
+
+## Fix: Duplicate Tools Icon in BottomNav
+- [x] Remove duplicate/blank Tools tab from bottom navigation
