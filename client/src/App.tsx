@@ -15,17 +15,19 @@ import SharedRoute from "./pages/SharedRoute";
 import RouteFinder from "./pages/RouteFinder";
 import Dashboard from "./pages/Dashboard";
 import Badges from "./pages/Badges";
+import Landing from "./pages/Landing";
 import BottomNav from "./components/BottomNav";
 import { useLocation } from "wouter";
 
 function Router() {
   const [location] = useLocation();
-  const hideNav = location.startsWith("/share/") || location.startsWith("/shared-route/");
+  const hideNav = location.startsWith("/share/") || location.startsWith("/shared-route/") || location === "/landing";
 
   return (
     <div className="min-h-dvh bg-background flex flex-col">
       <Switch>
-        <Route path="/" component={Home} />
+        <Route path="/" component={Landing} />
+        <Route path="/calculator" component={Home} />
         <Route path="/chain" component={ChainPlanner} />
         <Route path="/history" component={History} />
         <Route path="/planner" component={DayPlanner} />

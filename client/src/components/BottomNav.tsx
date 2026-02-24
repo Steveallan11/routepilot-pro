@@ -5,7 +5,7 @@ import { useAuth } from "@/_core/hooks/useAuth";
 import { getLoginUrl } from "@/const";
 
 const navItems = [
-  { path: "/", icon: Car, label: "Calculator" },
+  { path: "/calculator", icon: Car, label: "Calculator" },
   { path: "/routes", icon: Navigation, label: "Routes" },
   { path: "/dashboard", icon: LayoutDashboard, label: "Dashboard" },
   { path: "/history", icon: History, label: "History" },
@@ -21,7 +21,7 @@ export default function BottomNav() {
       style={{ paddingBottom: "env(safe-area-inset-bottom, 0px)" }}>
       <div className="flex items-stretch max-w-lg mx-auto">
         {navItems.map(({ path, icon: Icon, label }) => {
-          const isActive = path === "/" ? location === "/" : location.startsWith(path);
+          const isActive = location === path || location.startsWith(path + "/");
           return (
             <Link key={path} href={path} className="flex-1">
               <div className={cn(

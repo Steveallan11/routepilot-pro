@@ -122,6 +122,16 @@
 - [x] Shareable route links: public page /shared-route/:token with map, legs, and cost
 - [x] Shareable route links: share button on route result cards
 
+## Feature: Landing / Splash Page
+- [x] Hero image generated (dark, cinematic, car delivery / UK motorway at night)
+- [x] Landing page at / (unauthenticated users see landing; authenticated redirect to /dashboard)
+- [x] Full-screen hero with animated image background and gradient overlay
+- [x] Sign In CTA button prominent in hero
+- [x] Feature explainer section (6 key features with icons)
+- [x] How it works 3-step section
+- [x] Stats bar (£0 fees, 2s to calculate, 25+ badges, 100% UK)
+- [x] Footer with tagline
+
 ## Feature: Driver Dashboard & Gamification
 
 ### Dashboard
