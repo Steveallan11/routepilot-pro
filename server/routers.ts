@@ -9,6 +9,7 @@ import { fuelRouter } from "./routers/fuel";
 import { historyRouter } from "./routers/history";
 import { aiRouter } from "./routers/ai";
 import { shareRouter } from "./routers/share";
+import { scanRouter } from "./routers/scan";
 
 export const appRouter = router({
   system: systemRouter,
@@ -27,6 +28,7 @@ export const appRouter = router({
   history: historyRouter,
   ai: aiRouter,
   share: shareRouter,
+  scan: scanRouter,
 });
 
 export type AppRouter = typeof appRouter;

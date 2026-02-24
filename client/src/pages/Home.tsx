@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { trpc } from "@/lib/trpc";
 import { Button } from "@/components/ui/button";
@@ -7,13 +7,14 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Switch } from "@/components/ui/switch";
 import { Slider } from "@/components/ui/slider";
-import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
+import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 import { getLoginUrl } from "@/const";
 import {
   Car, MapPin, PoundSterling, Fuel, Clock, TrendingUp,
-  ChevronDown, ChevronUp, Save, Zap, AlertCircle, CheckCircle2
+  ChevronDown, ChevronUp, Save, Zap, Camera, X, CheckCircle2,
+  AlertCircle, Loader2, Sparkles
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { calculateJobCost } from "../../../shared/routepilot-types";
@@ -62,8 +63,31 @@ function WorthItBadge({ score }: { score: "green" | "amber" | "red" }) {
   );
 }
 
+// Scan state type
+type ScanState =
+  | { status: "idle" }
+  | { status: "uploading" }
+  | { status: "extracting" }
+  | { status: "preview"; data: ScanResult }
+  | { status: "error"; message: string };
+
+interface ScanResult {
+  pickupPostcode: string;
+  dropoffPostcode: string;
+  deliveryFee: number;
+  fuelDeposit: number;
+  distanceMiles: number;
+  durationMins: number;
+  pickupAddress: string;
+  dropoffAddress: string;
+  brokerName: string;
+  scheduledDate: string;
+  jobReference: string;
+  confidence: number;
+}
+
 export default function Home() {
-  const { user, isAuthenticated } = useAuth();
+  const { isAuthenticated } = useAuth();
   const [form, setForm] = useState<CalcState>(DEFAULT_STATE);
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [result, setResult] = useState<{
@@ -71,11 +95,16 @@ export default function Home() {
     durationMins: number;
     breakdown: ReturnType<typeof calculateJobCost>;
   } | null>(null);
+  const [scanState, setScanState] = useState<ScanState>({ status: "idle" });
+  const [previewImageUrl, setPreviewImageUrl] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const { data: settings } = trpc.settings.get.useQuery(undefined, { enabled: isAuthenticated });
   const { data: fuelData } = trpc.fuel.averages.useQuery();
   const calculateMutation = trpc.jobs.calculate.useMutation();
   const createJobMutation = trpc.jobs.create.useMutation();
+  const uploadImageMutation = trpc.scan.uploadImage.useMutation();
+  const extractBookingMutation = trpc.scan.extractBooking.useMutation();
 
   // Apply settings defaults
   useEffect(() => {
@@ -96,6 +125,73 @@ export default function Home() {
   const fuelPricePerLitre = fuelData
     ? (form.fuelReimbursed ? 0 : (fuelData.petrolPencePerLitre / 100))
     : 1.43;
+
+  // Handle screenshot scan
+  const handleScanImage = async (file: File) => {
+    if (!file.type.startsWith("image/")) {
+      toast.error("Please select an image file");
+      return;
+    }
+    if (file.size > 10 * 1024 * 1024) {
+      toast.error("Image too large. Please use an image under 10MB.");
+      return;
+    }
+
+    // Show local preview immediately
+    const localUrl = URL.createObjectURL(file);
+    setPreviewImageUrl(localUrl);
+    setScanState({ status: "uploading" });
+
+    try {
+      // Convert to base64
+      const base64Data = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => {
+          const result = reader.result as string;
+          // Strip the data URL prefix (e.g. "data:image/jpeg;base64,")
+          resolve(result.split(",")[1] ?? "");
+        };
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+      });
+
+      setScanState({ status: "uploading" });
+      const { url: imageUrl } = await uploadImageMutation.mutateAsync({
+        base64Data,
+        mimeType: file.type,
+      });
+
+      setScanState({ status: "extracting" });
+      const extracted = await extractBookingMutation.mutateAsync({ imageUrl });
+
+      setScanState({ status: "preview", data: extracted });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Scan failed. Please try again.";
+      setScanState({ status: "error", message });
+      toast.error(message);
+    }
+  };
+
+  // Apply scanned data to form
+  const applyScannedData = (data: ScanResult) => {
+    setForm(prev => ({
+      ...prev,
+      pickupPostcode: data.pickupPostcode || prev.pickupPostcode,
+      dropoffPostcode: data.dropoffPostcode || prev.dropoffPostcode,
+      deliveryFee: data.deliveryFee > 0 ? data.deliveryFee.toString() : prev.deliveryFee,
+      fuelDeposit: data.fuelDeposit > 0 ? data.fuelDeposit.toString() : prev.fuelDeposit,
+    }));
+    setScanState({ status: "idle" });
+    setPreviewImageUrl(null);
+    setResult(null);
+    toast.success("Booking details filled in! Check and calculate.");
+  };
+
+  const dismissScan = () => {
+    setScanState({ status: "idle" });
+    setPreviewImageUrl(null);
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  };
 
   const handleCalculate = async () => {
     if (!form.pickupPostcode || !form.dropoffPostcode || !form.deliveryFee) {
@@ -120,7 +216,7 @@ export default function Home() {
         fuelPricePerLitre: fuelData?.petrolPencePerLitre,
       });
       setResult(res);
-    } catch (err) {
+    } catch {
       toast.error("Calculation failed. Please check your postcodes.");
     }
   };
@@ -150,15 +246,51 @@ export default function Home() {
   const update = (key: keyof CalcState, value: string | number | boolean) =>
     setForm(prev => ({ ...prev, [key]: value }));
 
+  const isScanning = scanState.status === "uploading" || scanState.status === "extracting";
+
   return (
     <div className="pb-24 pt-4">
+      {/* Hidden file input */}
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/*"
+        capture="environment"
+        className="hidden"
+        onChange={e => {
+          const file = e.target.files?.[0];
+          if (file) handleScanImage(file);
+        }}
+      />
+
       {/* Header */}
       <div className="px-4 mb-5">
-        <div className="flex items-center gap-2 mb-1">
-          <div className="w-8 h-8 rounded-lg bg-primary/20 flex items-center justify-center">
-            <Car size={18} className="text-primary" />
+        <div className="flex items-center justify-between mb-1">
+          <div className="flex items-center gap-2">
+            <div className="w-8 h-8 rounded-lg bg-primary/20 flex items-center justify-center">
+              <Car size={18} className="text-primary" />
+            </div>
+            <h1 className="text-xl font-bold text-foreground">RoutePilot Pro</h1>
           </div>
-          <h1 className="text-xl font-bold text-foreground">RoutePilot Pro</h1>
+          {/* Scan booking button */}
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => fileInputRef.current?.click()}
+            disabled={isScanning}
+            className="flex items-center gap-1.5 border-primary/40 text-primary hover:bg-primary/10 hover:border-primary"
+          >
+            {isScanning ? (
+              <Loader2 size={14} className="animate-spin" />
+            ) : (
+              <Camera size={14} />
+            )}
+            <span className="text-xs font-semibold">
+              {scanState.status === "uploading" ? "Uploading..." :
+               scanState.status === "extracting" ? "Reading..." :
+               "Scan Booking"}
+            </span>
+          </Button>
         </div>
         <p className="text-sm text-muted-foreground">Calculate your delivery profitability</p>
         {fuelData && (
@@ -173,6 +305,149 @@ export default function Home() {
       </div>
 
       <div className="px-4 space-y-4">
+
+        {/* AI Scan Preview Card */}
+        {(isScanning || scanState.status === "preview" || scanState.status === "error") && (
+          <Card className={cn(
+            "border overflow-hidden animate-in fade-in slide-in-from-top-2 duration-200",
+            scanState.status === "preview" ? "border-primary/50 bg-primary/5" :
+            scanState.status === "error" ? "border-destructive/50 bg-destructive/5" :
+            "border-border bg-card"
+          )}>
+            <CardHeader className="pb-2 pt-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Sparkles size={14} className={cn(
+                    isScanning ? "text-muted-foreground animate-pulse" : "text-primary"
+                  )} />
+                  <CardTitle className="text-sm font-semibold">
+                    {isScanning ? (
+                      scanState.status === "uploading" ? "Uploading image..." : "AI reading your booking..."
+                    ) : scanState.status === "preview" ? (
+                      "Booking Detected"
+                    ) : (
+                      "Scan Failed"
+                    )}
+                  </CardTitle>
+                </div>
+                <button onClick={dismissScan} className="text-muted-foreground hover:text-foreground">
+                  <X size={16} />
+                </button>
+              </div>
+            </CardHeader>
+
+            {isScanning && (
+              <CardContent className="pb-3">
+                <div className="flex items-center gap-3">
+                  {previewImageUrl && (
+                    <img src={previewImageUrl} alt="Booking" className="w-16 h-20 object-cover rounded-md border border-border" />
+                  )}
+                  <div className="flex-1 space-y-2">
+                    <div className="h-3 bg-secondary rounded animate-pulse w-3/4" />
+                    <div className="h-3 bg-secondary rounded animate-pulse w-1/2" />
+                    <div className="h-3 bg-secondary rounded animate-pulse w-2/3" />
+                  </div>
+                </div>
+              </CardContent>
+            )}
+
+            {scanState.status === "preview" && (
+              <CardContent className="pb-3 space-y-3">
+                <div className="flex gap-3">
+                  {previewImageUrl && (
+                    <img src={previewImageUrl} alt="Booking" className="w-16 h-20 object-cover rounded-md border border-border flex-shrink-0" />
+                  )}
+                  <div className="flex-1 space-y-1.5 min-w-0">
+                    {scanState.data.brokerName && (
+                      <div className="flex items-center gap-1.5">
+                        <Badge variant="secondary" className="text-xs">{scanState.data.brokerName}</Badge>
+                        {scanState.data.jobReference && (
+                          <span className="text-xs text-muted-foreground truncate">{scanState.data.jobReference}</span>
+                        )}
+                      </div>
+                    )}
+                    <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-xs">
+                      {scanState.data.pickupPostcode && (
+                        <div>
+                          <span className="text-muted-foreground">From: </span>
+                          <span className="font-mono font-semibold text-foreground">{scanState.data.pickupPostcode}</span>
+                        </div>
+                      )}
+                      {scanState.data.dropoffPostcode && (
+                        <div>
+                          <span className="text-muted-foreground">To: </span>
+                          <span className="font-mono font-semibold text-foreground">{scanState.data.dropoffPostcode}</span>
+                        </div>
+                      )}
+                      {scanState.data.deliveryFee > 0 && (
+                        <div>
+                          <span className="text-muted-foreground">Fee: </span>
+                          <span className="font-mono font-semibold text-primary">£{scanState.data.deliveryFee.toFixed(2)}</span>
+                        </div>
+                      )}
+                      {scanState.data.distanceMiles > 0 && (
+                        <div>
+                          <span className="text-muted-foreground">Distance: </span>
+                          <span className="font-mono font-semibold text-foreground">{scanState.data.distanceMiles} mi</span>
+                        </div>
+                      )}
+                    </div>
+                    {scanState.data.pickupAddress && (
+                      <p className="text-xs text-muted-foreground truncate">{scanState.data.pickupAddress}</p>
+                    )}
+                    {/* Confidence indicator */}
+                    <div className="flex items-center gap-1.5 mt-1">
+                      {scanState.data.confidence >= 0.8 ? (
+                        <CheckCircle2 size={11} className="text-primary" />
+                      ) : (
+                        <AlertCircle size={11} className="text-amber-500" />
+                      )}
+                      <span className="text-xs text-muted-foreground">
+                        {scanState.data.confidence >= 0.8 ? "High confidence" :
+                         scanState.data.confidence >= 0.5 ? "Please verify details" :
+                         "Low confidence — check carefully"}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex gap-2">
+                  <Button
+                    onClick={() => applyScannedData(scanState.data)}
+                    size="sm"
+                    className="flex-1 bg-primary text-primary-foreground hover:bg-primary/90 h-9"
+                  >
+                    <CheckCircle2 size={14} className="mr-1.5" />
+                    Use These Details
+                  </Button>
+                  <Button
+                    onClick={dismissScan}
+                    variant="outline"
+                    size="sm"
+                    className="h-9 border-border"
+                  >
+                    Dismiss
+                  </Button>
+                </div>
+              </CardContent>
+            )}
+
+            {scanState.status === "error" && (
+              <CardContent className="pb-3">
+                <p className="text-sm text-destructive mb-3">{scanState.message}</p>
+                <Button
+                  onClick={() => fileInputRef.current?.click()}
+                  size="sm"
+                  variant="outline"
+                  className="border-border"
+                >
+                  Try Again
+                </Button>
+              </CardContent>
+            )}
+          </Card>
+        )}
+
         {/* Job Input Card */}
         <Card className="bg-card border-border">
           <CardHeader className="pb-3">

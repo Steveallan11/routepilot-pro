@@ -45,4 +45,11 @@
 - [ ] Final checkpoint and delivery
 
 ## Bugs
-- [ ] Sign in / sign up not working — users cannot authenticate
+- [x] Sign in / sign up not working — resolved: Sign In button added to nav bar; works on published URL
+
+## Feature: AI Booking Screenshot Scanner
+- [x] Server: tRPC procedure to accept image URL and extract job fields via LLM vision
+- [x] Server: Upload image to S3, pass URL to LLM with structured JSON schema response
+- [x] Frontend: Camera/upload button on Calculator page
+- [x] Frontend: Show extracted fields preview with edit-before-confirm step
+- [x] Frontend: Auto-fill all form fields from extracted data
