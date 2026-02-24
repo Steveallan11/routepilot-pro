@@ -323,3 +323,8 @@
 - [x] UI: Step mode chips shown in collapsed leg header (Walk → Bus → Train icons)
 - [x] UI: "Change option" button replaces old inline edit to switch between transport options
 - [x] Tests: 9 new vitest unit tests for step insert/remove/update/recalculate logic (37 total)
+
+## Fix: Step Editor Mobile UX
+- [x] Make entire step row tappable to open edit form (remove hover-only gear icon)
+- [x] Newly inserted steps open in edit mode immediately
+- [x] Edit form always accessible on touch devices (no hover dependency)

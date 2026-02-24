@@ -220,6 +220,7 @@ function StepEditor({
   onUpdate,
   onRemove,
   onInsertAfter,
+  initiallyEditing = false,
 }: {
   step: TransitStep;
   stepIndex: number;
@@ -227,19 +228,34 @@ function StepEditor({
   onUpdate: (idx: number, updated: TransitStep) => void;
   onRemove: (idx: number) => void;
   onInsertAfter: (idx: number) => void;
+  initiallyEditing?: boolean;
 }) {
-  const [editing, setEditing] = useState(false);
+  const [editing, setEditing] = useState(initiallyEditing);
   const [editMode, setEditMode] = useState(step.mode);
   const [editDuration, setEditDuration] = useState(String(step.durationMins));
-  const [editCost, setEditCost] = useState(String(step.mode === "WALK" ? 0 : (STEP_MODE_COSTS[step.mode] ?? 0)));
   const [editInstruction, setEditInstruction] = useState(step.instruction);
   const icon = modeIcons[step.mode] ?? <Navigation size={12} />;
   const color = stepModeColors[step.mode] ?? "text-foreground";
   const isWalk = step.mode === "WALK";
 
+  // Sync local state when step prop changes (e.g. after save)
+  useEffect(() => {
+    if (!editing) {
+      setEditMode(step.mode);
+      setEditDuration(String(step.durationMins));
+      setEditInstruction(step.instruction);
+    }
+  }, [step, editing]);
+
+  function openEdit() {
+    setEditMode(step.mode);
+    setEditDuration(String(step.durationMins));
+    setEditInstruction(step.instruction);
+    setEditing(true);
+  }
+
   function saveStep() {
     const dur = parseInt(editDuration);
-    const cost = parseFloat(editCost);
     onUpdate(stepIndex, {
       ...step,
       mode: editMode,
@@ -250,7 +266,7 @@ function StepEditor({
   }
 
   return (
-    <div className="group">
+    <div>
       <div className="flex items-start gap-2 py-1.5">
         <div className={cn("mt-0.5 shrink-0", color)}>{icon}</div>
         <div className="flex-1 min-w-0">
@@ -261,33 +277,37 @@ function StepEditor({
                   <label className="text-[10px] text-muted-foreground">Mode</label>
                   <select
                     value={editMode}
-                    onChange={e => { setEditMode(e.target.value); setEditCost(String(STEP_MODE_COSTS[e.target.value] ?? 0)); }}
-                    className="w-full mt-0.5 text-xs bg-background border border-border rounded-md px-2 py-1 text-foreground"
+                    onChange={e => setEditMode(e.target.value)}
+                    className="w-full mt-0.5 text-xs bg-background border border-border rounded-md px-2 py-1.5 text-foreground"
                   >
                     {STEP_MODES.map(m => <option key={m} value={m}>{m.charAt(0) + m.slice(1).toLowerCase()}</option>)}
                   </select>
                 </div>
                 <div>
                   <label className="text-[10px] text-muted-foreground">Duration (min)</label>
-                  <Input type="number" min="0" value={editDuration} onChange={e => setEditDuration(e.target.value)} className="mt-0.5 h-7 text-xs font-mono" />
+                  <Input type="number" min="0" value={editDuration} onChange={e => setEditDuration(e.target.value)} className="mt-0.5 h-8 text-xs font-mono" />
                 </div>
               </div>
               <div>
                 <label className="text-[10px] text-muted-foreground">Description</label>
-                <Input value={editInstruction} onChange={e => setEditInstruction(e.target.value)} className="mt-0.5 h-7 text-xs" />
+                <Input value={editInstruction} onChange={e => setEditInstruction(e.target.value)} placeholder="e.g. Take bus 46 to Temple Meads" className="mt-0.5 h-8 text-xs" />
               </div>
-              <div className="flex gap-1.5">
-                <Button size="sm" className="flex-1 h-6 text-[10px]" onClick={saveStep}>Save step</Button>
-                <Button size="sm" variant="outline" className="h-6 text-[10px] px-2" onClick={() => setEditing(false)}>Cancel</Button>
+              <div className="flex gap-2">
+                <Button size="sm" className="flex-1 h-8 text-xs" onClick={saveStep}>Save</Button>
+                <Button size="sm" variant="outline" className="h-8 text-xs px-3" onClick={() => setEditing(false)}>Cancel</Button>
                 {totalSteps > 1 && (
-                  <Button size="sm" variant="outline" className="h-6 text-[10px] px-2 text-destructive hover:text-destructive" onClick={() => onRemove(stepIndex)}>
-                    <Trash2 size={10} />
+                  <Button size="sm" variant="outline" className="h-8 text-xs px-3 text-destructive hover:text-destructive border-destructive/30" onClick={() => onRemove(stepIndex)}>
+                    <Trash2 size={12} />
                   </Button>
                 )}
               </div>
             </div>
           ) : (
-            <div className="flex items-center justify-between gap-2">
+            // Entire row is tappable on mobile — no hover required
+            <button
+              onClick={openEdit}
+              className="w-full text-left flex items-center justify-between gap-2 rounded-lg px-2 py-1 -mx-2 hover:bg-secondary/60 active:bg-secondary transition-colors"
+            >
               <div className="flex-1 min-w-0">
                 <span className={cn("text-xs font-medium", color)}>
                   {isWalk ? `Walk ${step.durationMins} min` : step.instruction}
@@ -308,23 +328,21 @@ function StepEditor({
               </div>
               <div className="flex items-center gap-1.5 shrink-0">
                 <span className="text-[10px] text-muted-foreground font-mono">{step.durationMins}m</span>
-                <button
-                  onClick={() => { setEditMode(step.mode); setEditDuration(String(step.durationMins)); setEditInstruction(step.instruction); setEditing(true); }}
-                  className="opacity-0 group-hover:opacity-100 text-[10px] text-muted-foreground hover:text-foreground transition-all px-1.5 py-0.5 rounded hover:bg-secondary"
-                >
-                  <Settings size={10} />
-                </button>
+                {/* Always-visible edit indicator — no hover needed on mobile */}
+                <span className="text-muted-foreground/60">
+                  <Settings size={11} />
+                </span>
               </div>
-            </div>
+            </button>
           )}
         </div>
       </div>
-      {/* Insert step button — appears between steps */}
+      {/* Insert step button — always visible, full-width tap target */}
       <button
         onClick={() => onInsertAfter(stepIndex)}
-        className="w-full flex items-center justify-center gap-1 text-[9px] text-muted-foreground/50 hover:text-primary hover:bg-primary/5 rounded py-0.5 transition-all opacity-0 group-hover:opacity-100"
+        className="w-full flex items-center justify-center gap-1 text-[10px] text-muted-foreground/60 hover:text-primary active:text-primary hover:bg-primary/5 rounded-md py-1 transition-colors border border-dashed border-transparent hover:border-primary/20"
       >
-        <Plus size={9} /> insert step
+        <Plus size={10} /> insert step here
       </button>
     </div>
   );
@@ -350,6 +368,8 @@ function TransportLegCard({
 }) {
   const [expanded, setExpanded] = useState(false);
   const [showOptions, setShowOptions] = useState(false);
+  // Track which newly-inserted step index should open in edit mode
+  const [newlyInsertedIdx, setNewlyInsertedIdx] = useState<number | null>(null);
   const selectedOpt = leg.options[leg.selectedOptionIndex] ?? leg.options[0];
   const steps: TransitStep[] = selectedOpt?.steps ?? [];
 
@@ -357,16 +377,18 @@ function TransportLegCard({
   function handleUpdateStep(stepIdx: number, updated: TransitStep) {
     const newSteps = steps.map((s, i) => i === stepIdx ? updated : s);
     onEditSteps?.(legIndex, newSteps);
+    setNewlyInsertedIdx(null); // clear after save
   }
 
   function handleRemoveStep(stepIdx: number) {
     if (steps.length <= 1) return;
     const newSteps = steps.filter((_, i) => i !== stepIdx);
     onEditSteps?.(legIndex, newSteps);
+    setNewlyInsertedIdx(null);
   }
 
   function handleInsertAfter(stepIdx: number) {
-    const prev = steps[stepIdx];
+    const insertAt = stepIdx + 1;
     const newStep: TransitStep = {
       mode: "WALK",
       instruction: "Walk to next stop",
@@ -374,11 +396,13 @@ function TransportLegCard({
       distanceMetres: 400,
     };
     const newSteps = [
-      ...steps.slice(0, stepIdx + 1),
+      ...steps.slice(0, insertAt),
       newStep,
-      ...steps.slice(stepIdx + 1),
+      ...steps.slice(insertAt),
     ];
     onEditSteps?.(legIndex, newSteps);
+    // Open the new step in edit mode immediately
+    setNewlyInsertedIdx(insertAt);
   }
 
   // Compute summary from steps
@@ -514,13 +538,14 @@ function TransportLegCard({
               <div className="divide-y divide-border/20">
                 {steps.map((step, si) => (
                   <StepEditor
-                    key={si}
+                    key={`${si}-${steps.length}`}
                     step={step}
                     stepIndex={si}
                     totalSteps={steps.length}
                     onUpdate={handleUpdateStep}
                     onRemove={handleRemoveStep}
                     onInsertAfter={handleInsertAfter}
+                    initiallyEditing={newlyInsertedIdx === si}
                   />
                 ))}
               </div>
@@ -528,7 +553,7 @@ function TransportLegCard({
             {/* Add step at end */}
             <button
               onClick={() => handleInsertAfter(steps.length - 1)}
-              className="w-full mt-2 flex items-center justify-center gap-1.5 text-xs text-muted-foreground hover:text-primary border border-dashed border-border rounded-lg py-1.5 transition-colors hover:border-primary/40"
+              className="w-full mt-2 flex items-center justify-center gap-1.5 text-xs text-muted-foreground hover:text-primary active:text-primary border border-dashed border-border rounded-lg py-2 transition-colors hover:border-primary/40"
             >
               <Plus size={11} /> Add step
             </button>
