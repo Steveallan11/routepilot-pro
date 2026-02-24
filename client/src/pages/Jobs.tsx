@@ -21,6 +21,33 @@ import {
 import { cn } from "@/lib/utils";
 import { calculateJobCost } from "../../../shared/routepilot-types";
 import { useLocation } from "wouter";
+import { TravelPlanner } from "@/components/TravelPlanner";
+import { NotificationPermissionBanner } from "@/components/NotificationPermissionBanner";
+import { useNotifications } from "@/hooks/useNotifications";
+
+// ─── Travel Planner Section ──────────────────────────────────────────────────
+
+function TravelPlannerSection({ job }: { job: Job }) {
+  const updateMutation = trpc.jobs.update.useMutation();
+  const utils = trpc.useUtils();
+
+  function handleSaveToJob(cost: number, mode: "train" | "bus" | "taxi" | "own_car" | "none") {
+    updateMutation.mutate(
+      { id: job.id, travelToJobCost: cost, travelToJobMode: mode },
+      { onSuccess: () => utils.jobs.list.invalidate() }
+    );
+  }
+
+  return (
+    <TravelPlanner
+      pickupAddress={job.pickupAddress ?? job.pickupPostcode}
+      arriveBy={job.scheduledPickupAt ? new Date(job.scheduledPickupAt).toISOString() : undefined}
+      savedRoute={job.travelRouteData as Parameters<typeof TravelPlanner>[0]["savedRoute"]}
+      jobId={job.id}
+      onSaveToJob={handleSaveToJob}
+    />
+  );
+}
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -65,6 +92,13 @@ type Job = {
   scannedDistanceMiles: number | null;
   scannedDurationMins: number | null;
   scheduledPickupAt: Date | null;
+  scheduledDropoffAt: Date | null;
+  pickupContactName: string | null;
+  pickupContactPhone: string | null;
+  dropoffContactName: string | null;
+  dropoffContactPhone: string | null;
+  customerName: string | null;
+  travelRouteData: unknown | null;
   completedAt: Date | null;
   createdAt: Date;
 };
@@ -263,8 +297,11 @@ function JobDetailSheet({ job, onClose, onStatusChange, onDelete }: {
             </div>
           )}
 
+          {/* Travel Planner */}
+          <TravelPlannerSection job={job} />
+
           {/* Job sheet */}
-          {(job.brokerName || job.jobReference || job.vehicleReg) && (
+          {(job.brokerName || job.jobReference || job.vehicleReg || job.pickupContactName || job.dropoffContactName || job.customerName) && (
             <div>
               <p className="text-xs text-muted-foreground uppercase tracking-wide font-medium mb-2 flex items-center gap-1.5">
                 <FileText size={11} /> Job Sheet
@@ -282,16 +319,86 @@ function JobDetailSheet({ job, onClose, onStatusChange, onDelete }: {
                     <span className="font-mono text-xs">{job.jobReference}</span>
                   </div>
                 )}
+                {job.scheduledPickupAt && (
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground flex items-center gap-1"><Clock size={11} /> Pickup</span>
+                    <span className="text-xs">{formatDateTime(job.scheduledPickupAt)}</span>
+                  </div>
+                )}
+                {job.scheduledDropoffAt && (
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground flex items-center gap-1"><Clock size={11} /> Dropoff</span>
+                    <span className="text-xs">{formatDateTime(job.scheduledDropoffAt)}</span>
+                  </div>
+                )}
+                {job.customerName && (
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Customer</span>
+                    <span className="text-xs font-medium">{job.customerName}</span>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Vehicle details */}
+          {(job.vehicleReg || job.vehicleMake || job.vehicleColour || job.vehicleFuelType) && (
+            <div>
+              <p className="text-xs text-muted-foreground uppercase tracking-wide font-medium mb-2 flex items-center gap-1.5">
+                <Car size={11} /> Vehicle
+              </p>
+              <div className="bg-secondary rounded-xl p-3 space-y-1.5 text-sm">
+                {(job.vehicleMake || job.vehicleModel) && (
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Make / Model</span>
+                    <span className="font-medium">{[job.vehicleMake, job.vehicleModel].filter(Boolean).join(" ")}</span>
+                  </div>
+                )}
                 {job.vehicleReg && (
                   <div className="flex justify-between">
-                    <span className="text-muted-foreground flex items-center gap-1"><Car size={11} /> Vehicle</span>
-                    <span className="font-mono text-xs">{[job.vehicleMake, job.vehicleModel, job.vehicleReg].filter(Boolean).join(" ")}</span>
+                    <span className="text-muted-foreground">Registration</span>
+                    <span className="font-mono font-bold tracking-wider text-xs bg-amber-400/10 text-amber-400 px-2 py-0.5 rounded">{job.vehicleReg}</span>
                   </div>
                 )}
                 {job.vehicleColour && (
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">Colour</span>
                     <span className="text-xs">{job.vehicleColour}</span>
+                  </div>
+                )}
+                {job.vehicleFuelType && job.vehicleFuelType !== "unknown" && (
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground flex items-center gap-1"><Fuel size={11} /> Fuel</span>
+                    <span className="text-xs capitalize">{job.vehicleFuelType}</span>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Contact details */}
+          {(job.pickupContactName || job.dropoffContactName) && (
+            <div>
+              <p className="text-xs text-muted-foreground uppercase tracking-wide font-medium mb-2 flex items-center gap-1.5">
+                <MapPin size={11} /> Contacts
+              </p>
+              <div className="space-y-2">
+                {job.pickupContactName && (
+                  <div className="bg-secondary rounded-xl px-3 py-2">
+                    <p className="text-[10px] text-muted-foreground mb-0.5">Pickup</p>
+                    <p className="text-sm font-medium">{job.pickupContactName}</p>
+                    {job.pickupContactPhone && (
+                      <a href={`tel:${job.pickupContactPhone}`} className="text-xs text-primary">{job.pickupContactPhone}</a>
+                    )}
+                  </div>
+                )}
+                {job.dropoffContactName && (
+                  <div className="bg-secondary rounded-xl px-3 py-2">
+                    <p className="text-[10px] text-muted-foreground mb-0.5">Dropoff</p>
+                    <p className="text-sm font-medium">{job.dropoffContactName}</p>
+                    {job.dropoffContactPhone && (
+                      <a href={`tel:${job.dropoffContactPhone}`} className="text-xs text-primary">{job.dropoffContactPhone}</a>
+                    )}
                   </div>
                 )}
               </div>
@@ -320,7 +427,6 @@ function JobDetailSheet({ job, onClose, onStatusChange, onDelete }: {
 
           {/* Dates */}
           <div className="space-y-1 text-xs text-muted-foreground">
-            {job.scheduledPickupAt && <p>Scheduled: {formatDateTime(job.scheduledPickupAt)}</p>}
             {job.completedAt && <p>Completed: {formatDateTime(job.completedAt)}</p>}
             <p>Added: {formatDateTime(job.createdAt)}</p>
           </div>
@@ -378,7 +484,7 @@ function JobDetailSheet({ job, onClose, onStatusChange, onDelete }: {
 
 // ─── Add Job Sheet (inline calculator) ───────────────────────────────────────
 
-function AddJobSheet({ onClose, onSaved, prefilledDate }: { onClose: () => void; onSaved: () => void; prefilledDate?: string }) {
+function AddJobSheet({ onClose, onSaved, prefilledDate }: { onClose: () => void; onSaved: (job?: { id: number; pickupPostcode: string; dropoffPostcode: string; scheduledPickupAt?: Date | null; brokerName?: string | null }) => void; prefilledDate?: string }) {
   const { isAuthenticated } = useAuth();
   const [pickup, setPickup] = useState("");
   const [dropoff, setDropoff] = useState("");
@@ -395,6 +501,18 @@ function AddJobSheet({ onClose, onSaved, prefilledDate }: { onClose: () => void;
   const [travelHomeMode, setTravelHomeMode] = useState("none");
   const [notes, setNotes] = useState("");
   const [vehicleReg, setVehicleReg] = useState("");
+  const [vehicleMake, setVehicleMake] = useState("");
+  const [vehicleModel, setVehicleModel] = useState("");
+  const [vehicleColour, setVehicleColour] = useState("");
+  const [vehicleFuelType, setVehicleFuelType] = useState<"petrol" | "diesel" | "electric" | "hybrid" | "unknown">("unknown");
+  const [pickupAddress, setPickupAddress] = useState("");
+  const [dropoffAddress, setDropoffAddress] = useState("");
+  const [scheduledDropoffDate, setScheduledDropoffDate] = useState("");
+  const [pickupContactName, setPickupContactName] = useState("");
+  const [pickupContactPhone, setPickupContactPhone] = useState("");
+  const [dropoffContactName, setDropoffContactName] = useState("");
+  const [dropoffContactPhone, setDropoffContactPhone] = useState("");
+  const [customerName, setCustomerName] = useState("");
   const [showExtra, setShowExtra] = useState(false);
   const [result, setResult] = useState<{ distanceMiles: number; durationMins: number; breakdown: ReturnType<typeof calculateJobCost> } | null>(null);
   const [scanState, setScanState] = useState<"idle" | "uploading" | "extracting" | "error">("idle");
@@ -436,7 +554,7 @@ function AddJobSheet({ onClose, onSaved, prefilledDate }: { onClose: () => void;
       return;
     }
     try {
-      await createJobMutation.mutateAsync({
+      const savedJob = await createJobMutation.mutateAsync({
         pickupPostcode: pickup,
         dropoffPostcode: dropoff,
         deliveryFee: parseFloat(fee) || 0,
@@ -449,13 +567,31 @@ function AddJobSheet({ onClose, onSaved, prefilledDate }: { onClose: () => void;
         travelHomeCost: parseFloat(travelHome) || 0,
         travelHomeMode: travelHomeMode as "train" | "bus" | "taxi" | "own_car" | "none",
         scheduledPickupAt: scheduledDate || undefined,
+        scheduledDropoffAt: scheduledDropoffDate || undefined,
         brokerName: brokerName || undefined,
         jobReference: jobRef || undefined,
         notes: notes || undefined,
         vehicleReg: vehicleReg || undefined,
+        vehicleMake: vehicleMake || undefined,
+        vehicleModel: vehicleModel || undefined,
+        vehicleColour: vehicleColour || undefined,
+        vehicleFuelType: vehicleFuelType !== "unknown" ? vehicleFuelType : undefined,
+        pickupAddress: pickupAddress || undefined,
+        dropoffAddress: dropoffAddress || undefined,
+        pickupContactName: pickupContactName || undefined,
+        pickupContactPhone: pickupContactPhone || undefined,
+        dropoffContactName: dropoffContactName || undefined,
+        dropoffContactPhone: dropoffContactPhone || undefined,
+        customerName: customerName || undefined,
       });
       toast.success("Job saved!");
-      onSaved();
+      onSaved({
+        id: (savedJob as { jobId?: number })?.jobId ?? 0,
+        pickupPostcode: pickup,
+        dropoffPostcode: dropoff,
+        scheduledPickupAt: scheduledDate ? new Date(scheduledDate) : null,
+        brokerName: brokerName || null,
+      });
       onClose();
     } catch {
       toast.error("Failed to save job");
@@ -476,12 +612,29 @@ function AddJobSheet({ onClose, onSaved, prefilledDate }: { onClose: () => void;
         if (data.pickupPostcode) setPickup(data.pickupPostcode);
         if (data.dropoffPostcode) setDropoff(data.dropoffPostcode);
         if (data.deliveryFee) setFee(String(data.deliveryFee));
+        if (data.fuelDeposit) setFuelDeposit(String(data.fuelDeposit));
         if (data.brokerName) setBrokerName(data.brokerName);
         if (data.jobReference) setJobRef(data.jobReference);
         if (data.scheduledDate) setScheduledDate(data.scheduledDate);
-        if ((data as Record<string, unknown>).vehicleReg) setVehicleReg((data as Record<string, unknown>).vehicleReg as string);
+        if (data.scheduledDropoffDate) setScheduledDropoffDate(data.scheduledDropoffDate);
+        if (data.pickupAddress) setPickupAddress(data.pickupAddress);
+        if (data.dropoffAddress) setDropoffAddress(data.dropoffAddress);
+        if (data.vehicleReg) setVehicleReg(data.vehicleReg);
+        if (data.vehicleMake) setVehicleMake(data.vehicleMake);
+        if (data.vehicleModel) setVehicleModel(data.vehicleModel);
+        if (data.vehicleColour) setVehicleColour(data.vehicleColour);
+        if (data.vehicleFuelType) setVehicleFuelType(data.vehicleFuelType as typeof vehicleFuelType);
+        if (data.pickupContactName) setPickupContactName(data.pickupContactName);
+        if (data.pickupContactPhone) setPickupContactPhone(data.pickupContactPhone);
+        if (data.dropoffContactName) setDropoffContactName(data.dropoffContactName);
+        if (data.dropoffContactPhone) setDropoffContactPhone(data.dropoffContactPhone);
+        if (data.customerName) setCustomerName(data.customerName);
+        if (data.notes) setNotes(data.notes);
+        // Auto-show extra fields if we got vehicle/contact data
+        if (data.vehicleReg || data.vehicleMake || data.pickupContactName) setShowExtra(true);
         setScanState("idle");
-        toast.success("Booking scanned successfully");
+        const fieldsFound = [data.pickupPostcode, data.deliveryFee, data.vehicleReg, data.brokerName].filter(Boolean).length;
+        toast.success(`Booking scanned — ${fieldsFound} key fields extracted`);
       };
       reader.readAsDataURL(file);
     } catch {
@@ -628,28 +781,137 @@ function AddJobSheet({ onClose, onSaved, prefilledDate }: { onClose: () => void;
           </button>
 
           {showExtra && (
-            <div className="space-y-3">
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <Label className="text-xs text-muted-foreground mb-1.5 block">Broker Name</Label>
-                  <Input value={brokerName} onChange={e => setBrokerName(e.target.value)} placeholder="Waylands Group" />
-                </div>
-                <div>
-                  <Label className="text-xs text-muted-foreground mb-1.5 block">Job Reference</Label>
-                  <Input value={jobRef} onChange={e => setJobRef(e.target.value)} placeholder="WG-12345" className="font-mono" />
-                </div>
-              </div>
+            <div className="space-y-4">
+              {/* Broker & Reference */}
               <div>
-                <Label className="text-xs text-muted-foreground mb-1.5 block">Vehicle Reg</Label>
-                <Input value={vehicleReg} onChange={e => setVehicleReg(e.target.value.toUpperCase())} placeholder="AB12 CDE" className="font-mono uppercase" />
+                <p className="text-[10px] text-muted-foreground uppercase tracking-wide font-medium mb-2 flex items-center gap-1">
+                  <Building2 size={10} /> Broker & Booking
+                </p>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <Label className="text-xs text-muted-foreground mb-1.5 block">Broker Name</Label>
+                    <Input value={brokerName} onChange={e => setBrokerName(e.target.value)} placeholder="Waylands Group" />
+                  </div>
+                  <div>
+                    <Label className="text-xs text-muted-foreground mb-1.5 block">Job Reference</Label>
+                    <Input value={jobRef} onChange={e => setJobRef(e.target.value)} placeholder="WG-12345" className="font-mono" />
+                  </div>
+                </div>
               </div>
+
+              {/* Dropoff time */}
               <div>
-                <Label className="text-xs text-muted-foreground mb-1.5 block">Notes</Label>
-                <Input value={notes} onChange={e => setNotes(e.target.value)} placeholder="Any notes about this job..." />
+                <Label className="text-xs text-muted-foreground mb-1.5 block flex items-center gap-1">
+                  <CalendarDays size={11} /> Scheduled Dropoff Time
+                </Label>
+                <Input type="datetime-local" value={scheduledDropoffDate} onChange={e => setScheduledDropoffDate(e.target.value)} />
               </div>
+
+              {/* Full addresses */}
+              <div>
+                <p className="text-[10px] text-muted-foreground uppercase tracking-wide font-medium mb-2 flex items-center gap-1">
+                  <MapPin size={10} /> Full Addresses
+                </p>
+                <div className="space-y-2">
+                  <div>
+                    <Label className="text-xs text-muted-foreground mb-1 block">Pickup Address</Label>
+                    <Input value={pickupAddress} onChange={e => setPickupAddress(e.target.value)} placeholder="66 Denbigh Road, Bletchley, MK1 1DF" />
+                  </div>
+                  <div>
+                    <Label className="text-xs text-muted-foreground mb-1 block">Dropoff Address</Label>
+                    <Input value={dropoffAddress} onChange={e => setDropoffAddress(e.target.value)} placeholder="Thurleigh Airfield, Bedford, MK44 2YP" />
+                  </div>
+                </div>
+              </div>
+
+              {/* Vehicle details */}
+              <div>
+                <p className="text-[10px] text-muted-foreground uppercase tracking-wide font-medium mb-2 flex items-center gap-1">
+                  <Car size={10} /> Vehicle
+                </p>
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <Label className="text-xs text-muted-foreground mb-1 block">Registration</Label>
+                    <Input value={vehicleReg} onChange={e => setVehicleReg(e.target.value.toUpperCase())} placeholder="AB12 CDE" className="font-mono uppercase" />
+                  </div>
+                  <div>
+                    <Label className="text-xs text-muted-foreground mb-1 block">Make</Label>
+                    <Input value={vehicleMake} onChange={e => setVehicleMake(e.target.value)} placeholder="BMW" />
+                  </div>
+                  <div>
+                    <Label className="text-xs text-muted-foreground mb-1 block">Model</Label>
+                    <Input value={vehicleModel} onChange={e => setVehicleModel(e.target.value)} placeholder="3 Series" />
+                  </div>
+                  <div>
+                    <Label className="text-xs text-muted-foreground mb-1 block">Colour</Label>
+                    <Input value={vehicleColour} onChange={e => setVehicleColour(e.target.value)} placeholder="White" />
+                  </div>
+                </div>
+                <div className="mt-2">
+                  <Label className="text-xs text-muted-foreground mb-1 block">Fuel Type</Label>
+                  <Select value={vehicleFuelType} onValueChange={v => setVehicleFuelType(v as typeof vehicleFuelType)}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="petrol">Petrol</SelectItem>
+                      <SelectItem value="diesel">Diesel</SelectItem>
+                      <SelectItem value="electric">Electric</SelectItem>
+                      <SelectItem value="hybrid">Hybrid</SelectItem>
+                      <SelectItem value="unknown">Unknown</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              {/* Pickup contact */}
+              <div>
+                <p className="text-[10px] text-muted-foreground uppercase tracking-wide font-medium mb-2 flex items-center gap-1">
+                  <MapPin size={10} /> Pickup Contact
+                </p>
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <Label className="text-xs text-muted-foreground mb-1 block">Name</Label>
+                    <Input value={pickupContactName} onChange={e => setPickupContactName(e.target.value)} placeholder="Daniel Moore" />
+                  </div>
+                  <div>
+                    <Label className="text-xs text-muted-foreground mb-1 block">Phone</Label>
+                    <Input value={pickupContactPhone} onChange={e => setPickupContactPhone(e.target.value)} placeholder="07700 900000" />
+                  </div>
+                </div>
+              </div>
+
+              {/* Dropoff contact */}
+              <div>
+                <p className="text-[10px] text-muted-foreground uppercase tracking-wide font-medium mb-2 flex items-center gap-1">
+                  <Navigation size={10} /> Dropoff Contact
+                </p>
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <Label className="text-xs text-muted-foreground mb-1 block">Name</Label>
+                    <Input value={dropoffContactName} onChange={e => setDropoffContactName(e.target.value)} placeholder="Jake Weatherall" />
+                  </div>
+                  <div>
+                    <Label className="text-xs text-muted-foreground mb-1 block">Phone</Label>
+                    <Input value={dropoffContactPhone} onChange={e => setDropoffContactPhone(e.target.value)} placeholder="07700 900001" />
+                  </div>
+                </div>
+              </div>
+
+              {/* Customer name */}
+              <div>
+                <Label className="text-xs text-muted-foreground mb-1.5 block">Customer Name</Label>
+                <Input value={customerName} onChange={e => setCustomerName(e.target.value)} placeholder="Vehicle owner name" />
+              </div>
+
+              {/* Fuel deposit */}
               <div>
                 <Label className="text-xs text-muted-foreground mb-1.5 block">Fuel Deposit (£)</Label>
                 <Input type="number" value={fuelDeposit} onChange={e => setFuelDeposit(e.target.value)} placeholder="0" className="font-mono" />
+              </div>
+
+              {/* Notes */}
+              <div>
+                <Label className="text-xs text-muted-foreground mb-1.5 block">Notes / Special Instructions</Label>
+                <Input value={notes} onChange={e => setNotes(e.target.value)} placeholder="Any special instructions..." />
               </div>
             </div>
           )}
@@ -882,6 +1144,7 @@ export default function Jobs({ prefilledDate: initialDate }: { prefilledDate?: s
   const [showAddJob, setShowAddJob] = useState(!!effectiveInitialDate);
   const [addJobDate, setAddJobDate] = useState<string | undefined>(effectiveInitialDate);
   const [search, setSearch] = useState("");
+  const { scheduleJobReminder } = useNotifications();
 
   const { data: jobsData, refetch } = trpc.jobs.list.useQuery(
     { limit: 100 },
@@ -994,6 +1257,11 @@ export default function Jobs({ prefilledDate: initialDate }: { prefilledDate?: s
         </div>
       </div>
 
+      {/* Notification permission banner */}
+      <div className="px-4 pt-3">
+        <NotificationPermissionBanner />
+      </div>
+
       {/* Summary strip */}
       {filteredJobs.length > 0 && (
         <div className="flex gap-3 px-4 py-3 border-b border-border/50 bg-secondary/30">
@@ -1069,7 +1337,22 @@ export default function Jobs({ prefilledDate: initialDate }: { prefilledDate?: s
         />
       )}
       {showAddJob && (
-        <AddJobSheet onClose={() => { setShowAddJob(false); setAddJobDate(undefined); }} onSaved={() => refetch()} prefilledDate={addJobDate} />
+        <AddJobSheet
+          onClose={() => { setShowAddJob(false); setAddJobDate(undefined); }}
+          onSaved={(savedJob) => {
+            refetch();
+            if (savedJob?.scheduledPickupAt) {
+              scheduleJobReminder({
+                jobId: savedJob.id,
+                pickupPostcode: savedJob.pickupPostcode,
+                dropoffPostcode: savedJob.dropoffPostcode,
+                scheduledPickupAt: savedJob.scheduledPickupAt,
+                brokerName: savedJob.brokerName,
+              });
+            }
+          }}
+          prefilledDate={addJobDate}
+        />
       )}
     </div>
   );

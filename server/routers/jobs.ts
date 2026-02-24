@@ -38,6 +38,14 @@ const jobInputSchema = z.object({
   // Pre-scanned distance/duration from broker app screenshot
   scannedDistanceMiles: z.number().optional(),
   scannedDurationMins: z.number().optional(),
+  // Scheduled dropoff time
+  scheduledDropoffAt: z.string().optional(),
+  // Contact details
+  pickupContactName: z.string().max(100).optional(),
+  pickupContactPhone: z.string().max(30).optional(),
+  dropoffContactName: z.string().max(100).optional(),
+  dropoffContactPhone: z.string().max(30).optional(),
+  customerName: z.string().max(100).optional(),
 });
 
 async function getUserSettings(userId: number) {
@@ -198,6 +206,14 @@ export const jobsRouter = router({
         dropoffAddress: input.dropoffAddress ?? null,
         bookingImageUrl: input.bookingImageUrl ?? null,
         notes: input.notes ?? null,
+        // Scheduled dropoff
+        scheduledDropoffAt: input.scheduledDropoffAt ? new Date(input.scheduledDropoffAt) : undefined,
+        // Contact details
+        pickupContactName: input.pickupContactName ?? null,
+        pickupContactPhone: input.pickupContactPhone ?? null,
+        dropoffContactName: input.dropoffContactName ?? null,
+        dropoffContactPhone: input.dropoffContactPhone ?? null,
+        customerName: input.customerName ?? null,
       });
 
       // Fire gamification in background (don't block response)
@@ -249,7 +265,7 @@ export const jobsRouter = router({
       return result[0] ?? null;
     }),
 
-  // Update job status / actuals
+  // Update job status / actuals / metadata
   update: protectedProcedure
     .input(z.object({
       id: z.number(),
@@ -259,6 +275,23 @@ export const jobsRouter = router({
       actualFuelCost: z.number().optional(),
       actualNetProfit: z.number().optional(),
       actualNotes: z.string().optional(),
+      // Allow updating all job fields
+      scheduledPickupAt: z.string().optional(),
+      scheduledDropoffAt: z.string().optional(),
+      pickupContactName: z.string().max(100).optional(),
+      pickupContactPhone: z.string().max(30).optional(),
+      dropoffContactName: z.string().max(100).optional(),
+      dropoffContactPhone: z.string().max(30).optional(),
+      customerName: z.string().max(100).optional(),
+      vehicleMake: z.string().max(50).optional(),
+      vehicleModel: z.string().max(50).optional(),
+      vehicleReg: z.string().max(20).optional(),
+      vehicleFuelType: z.enum(["petrol", "diesel", "electric", "hybrid", "unknown"]).optional(),
+      vehicleColour: z.string().max(30).optional(),
+      notes: z.string().optional(),
+      travelRouteData: z.any().optional(),
+      travelToJobCost: z.number().min(0).optional(),
+      travelToJobMode: z.enum(["train", "bus", "taxi", "own_car", "none"]).optional(),
     }))
     .mutation(async ({ ctx, input }) => {
       const db = await getDb();
@@ -268,6 +301,13 @@ export const jobsRouter = router({
       const updateData: Record<string, unknown> = { ...updates };
       if (updates.status === "completed") {
         updateData.completedAt = new Date();
+      }
+      // Convert date strings to Date objects
+      if (typeof updates.scheduledPickupAt === "string") {
+        updateData.scheduledPickupAt = new Date(updates.scheduledPickupAt);
+      }
+      if (typeof updates.scheduledDropoffAt === "string") {
+        updateData.scheduledDropoffAt = new Date(updates.scheduledDropoffAt);
       }
 
       await db.update(jobs)

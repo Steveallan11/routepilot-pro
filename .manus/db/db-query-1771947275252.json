@@ -1,0 +1,402 @@
+{
+  "query": "SHOW COLUMNS FROM jobs;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway02.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 29dmg1z8s7MGkda.cd2f01f00c99 --database 6VTDyDwMUZs22XSbYJviE3 --execute SHOW COLUMNS FROM jobs;",
+  "rows": [
+    {
+      "Field": "id",
+      "Type": "int(11)",
+      "Null": "NO",
+      "Key": "PRI",
+      "Default": "NULL",
+      "Extra": "auto_increment"
+    },
+    {
+      "Field": "userId",
+      "Type": "int(11)",
+      "Null": "NO",
+      "Key": "",
+      "Default": "NULL",
+      "Extra": ""
+    },
+    {
+      "Field": "status",
+      "Type": "enum('planned','active','completed','cancelled')",
+      "Null": "NO",
+      "Key": "",
+      "Default": "planned",
+      "Extra": ""
+    },
+    {
+      "Field": "pickupPostcode",
+      "Type": "varchar(10)",
+      "Null": "NO",
+      "Key": "",
+      "Default": "NULL",
+      "Extra": ""
+    },
+    {
+      "Field": "pickupAddress",
+      "Type": "text",
+      "Null": "YES",
+      "Key": "",
+      "Default": "NULL",
+      "Extra": ""
+    },
+    {
+      "Field": "dropoffPostcode",
+      "Type": "varchar(10)",
+      "Null": "NO",
+      "Key": "",
+      "Default": "NULL",
+      "Extra": ""
+    },
+    {
+      "Field": "dropoffAddress",
+      "Type": "text",
+      "Null": "YES",
+      "Key": "",
+      "Default": "NULL",
+      "Extra": ""
+    },
+    {
+      "Field": "deliveryFee",
+      "Type": "float",
+      "Null": "NO",
+      "Key": "",
+      "Default": "NULL",
+      "Extra": ""
+    },
+    {
+      "Field": "fuelDeposit",
+      "Type": "float",
+      "Null": "NO",
+      "Key": "",
+      "Default": "0",
+      "Extra": ""
+    },
+    {
+      "Field": "brokerFeePercent",
+      "Type": "float",
+      "Null": "NO",
+      "Key": "",
+      "Default": "0",
+      "Extra": ""
+    },
+    {
+      "Field": "brokerFeeFixed",
+      "Type": "float",
+      "Null": "NO",
+      "Key": "",
+      "Default": "0",
+      "Extra": ""
+    },
+    {
+      "Field": "fuelReimbursed",
+      "Type": "tinyint(1)",
+      "Null": "NO",
+      "Key": "",
+      "Default": "0",
+      "Extra": ""
+    },
+    {
+      "Field": "estimatedDistanceMiles",
+      "Type": "float",
+      "Null": "YES",
+      "Key": "",
+      "Default": "NULL",
+      "Extra": ""
+    },
+    {
+      "Field": "estimatedDurationMins",
+      "Type": "float",
+      "Null": "YES",
+      "Key": "",
+      "Default": "NULL",
+      "Extra": ""
+    },
+    {
+      "Field": "estimatedFuelCost",
+      "Type": "float",
+      "Null": "YES",
+      "Key": "",
+      "Default": "NULL",
+      "Extra": ""
+    },
+    {
+      "Field": "estimatedFuelPricePerLitre",
+      "Type": "float",
+      "Null": "YES",
+      "Key": "",
+      "Default": "NULL",
+      "Extra": ""
+    },
+    {
+      "Field": "estimatedWearTear",
+      "Type": "float",
+      "Null": "YES",
+      "Key": "",
+      "Default": "NULL",
+      "Extra": ""
+    },
+    {
+      "Field": "estimatedTimeValue",
+      "Type": "float",
+      "Null": "YES",
+      "Key": "",
+      "Default": "NULL",
+      "Extra": ""
+    },
+    {
+      "Field": "estimatedNetProfit",
+      "Type": "float",
+      "Null": "YES",
+      "Key": "",
+      "Default": "NULL",
+      "Extra": ""
+    },
+    {
+      "Field": "estimatedProfitPerHour",
+      "Type": "float",
+      "Null": "YES",
+      "Key": "",
+      "Default": "NULL",
+      "Extra": ""
+    },
+    {
+      "Field": "estimatedProfitPerMile",
+      "Type": "float",
+      "Null": "YES",
+      "Key": "",
+      "Default": "NULL",
+      "Extra": ""
+    },
+    {
+      "Field": "worthItScore",
+      "Type": "enum('green','amber','red')",
+      "Null": "YES",
+      "Key": "",
+      "Default": "NULL",
+      "Extra": ""
+    },
+    {
+      "Field": "actualDistanceMiles",
+      "Type": "float",
+      "Null": "YES",
+      "Key": "",
+      "Default": "NULL",
+      "Extra": ""
+    },
+    {
+      "Field": "actualDurationMins",
+      "Type": "float",
+      "Null": "YES",
+      "Key": "",
+      "Default": "NULL",
+      "Extra": ""
+    },
+    {
+      "Field": "actualFuelCost",
+      "Type": "float",
+      "Null": "YES",
+      "Key": "",
+      "Default": "NULL",
+      "Extra": ""
+    },
+    {
+      "Field": "actualNetProfit",
+      "Type": "float",
+      "Null": "YES",
+      "Key": "",
+      "Default": "NULL",
+      "Extra": ""
+    },
+    {
+      "Field": "actualNotes",
+      "Type": "text",
+      "Null": "YES",
+      "Key": "",
+      "Default": "NULL",
+      "Extra": ""
+    },
+    {
+      "Field": "scheduledPickupAt",
+      "Type": "timestamp",
+      "Null": "YES",
+      "Key": "",
+      "Default": "NULL",
+      "Extra": ""
+    },
+    {
+      "Field": "completedAt",
+      "Type": "timestamp",
+      "Null": "YES",
+      "Key": "",
+      "Default": "NULL",
+      "Extra": ""
+    },
+    {
+      "Field": "routeData",
+      "Type": "json",
+      "Null": "YES",
+      "Key": "",
+      "Default": "NULL",
+      "Extra": ""
+    },
+    {
+      "Field": "createdAt",
+      "Type": "timestamp",
+      "Null": "NO",
+      "Key": "",
+      "Default": "CURRENT_TIMESTAMP",
+      "Extra": ""
+    },
+    {
+      "Field": "updatedAt",
+      "Type": "timestamp",
+      "Null": "NO",
+      "Key": "",
+      "Default": "CURRENT_TIMESTAMP",
+      "Extra": "DEFAULT_GENERATED on update CURRENT_TIMESTAMP"
+    },
+    {
+      "Field": "brokerName",
+      "Type": "varchar(100)",
+      "Null": "YES",
+      "Key": "",
+      "Default": "NULL",
+      "Extra": ""
+    },
+    {
+      "Field": "jobReference",
+      "Type": "varchar(100)",
+      "Null": "YES",
+      "Key": "",
+      "Default": "NULL",
+      "Extra": ""
+    },
+    {
+      "Field": "bookingImageUrl",
+      "Type": "text",
+      "Null": "YES",
+      "Key": "",
+      "Default": "NULL",
+      "Extra": ""
+    },
+    {
+      "Field": "notes",
+      "Type": "text",
+      "Null": "YES",
+      "Key": "",
+      "Default": "NULL",
+      "Extra": ""
+    },
+    {
+      "Field": "vehicleMake",
+      "Type": "varchar(50)",
+      "Null": "YES",
+      "Key": "",
+      "Default": "NULL",
+      "Extra": ""
+    },
+    {
+      "Field": "vehicleModel",
+      "Type": "varchar(50)",
+      "Null": "YES",
+      "Key": "",
+      "Default": "NULL",
+      "Extra": ""
+    },
+    {
+      "Field": "vehicleReg",
+      "Type": "varchar(20)",
+      "Null": "YES",
+      "Key": "",
+      "Default": "NULL",
+      "Extra": ""
+    },
+    {
+      "Field": "vehicleFuelType",
+      "Type": "enum('petrol','diesel','electric','hybrid','unknown')",
+      "Null": "YES",
+      "Key": "",
+      "Default": "unknown",
+      "Extra": ""
+    },
+    {
+      "Field": "vehicleColour",
+      "Type": "varchar(30)",
+      "Null": "YES",
+      "Key": "",
+      "Default": "NULL",
+      "Extra": ""
+    },
+    {
+      "Field": "scannedDistanceMiles",
+      "Type": "decimal(8,2)",
+      "Null": "YES",
+      "Key": "",
+      "Default": "NULL",
+      "Extra": ""
+    },
+    {
+      "Field": "scannedDurationMins",
+      "Type": "decimal(8,2)",
+      "Null": "YES",
+      "Key": "",
+      "Default": "NULL",
+      "Extra": ""
+    },
+    {
+      "Field": "travelToJobCost",
+      "Type": "decimal(8,2)",
+      "Null": "YES",
+      "Key": "",
+      "Default": "0",
+      "Extra": ""
+    },
+    {
+      "Field": "travelToJobMode",
+      "Type": "enum('train','bus','taxi','own_car','none')",
+      "Null": "YES",
+      "Key": "",
+      "Default": "none",
+      "Extra": ""
+    },
+    {
+      "Field": "travelHomePostcode",
+      "Type": "varchar(10)",
+      "Null": "YES",
+      "Key": "",
+      "Default": "NULL",
+      "Extra": ""
+    },
+    {
+      "Field": "travelHomeCost",
+      "Type": "decimal(8,2)",
+      "Null": "YES",
+      "Key": "",
+      "Default": "0",
+      "Extra": ""
+    },
+    {
+      "Field": "travelHomeMode",
+      "Type": "enum('train','bus','taxi','own_car','none')",
+      "Null": "YES",
+      "Key": "",
+      "Default": "none",
+      "Extra": ""
+    },
+    {
+      "Field": "brokerId",
+      "Type": "int(11)",
+      "Null": "YES",
+      "Key": "",
+      "Default": "NULL",
+      "Extra": ""
+    }
+  ],
+  "messages": [],
+  "stdout": "Field\tType\tNull\tKey\tDefault\tExtra\nid\tint(11)\tNO\tPRI\tNULL\tauto_increment\nuserId\tint(11)\tNO\t\tNULL\t\nstatus\tenum('planned','active','completed','cancelled')\tNO\t\tplanned\t\npickupPostcode\tvarchar(10)\tNO\t\tNULL\t\npickupAddress\ttext\tYES\t\tNULL\t\ndropoffPostcode\tvarchar(10)\tNO\t\tNULL\t\ndropoffAddress\ttext\tYES\t\tNULL\t\ndeliveryFee\tfloat\tNO\t\tNULL\t\nfuelDeposit\tfloat\tNO\t\t0\t\nbrokerFeePercent\tfloat\tNO\t\t0\t\nbrokerFeeFixed\tfloat\tNO\t\t0\t\nfuelReimbursed\ttinyint(1)\tNO\t\t0\t\nestimatedDistanceMiles\tfloat\tYES\t\tNULL\t\nestimatedDurationMins\tfloat\tYES\t\tNULL\t\nestimatedFuelCost\tfloat\tYES\t\tNULL\t\nestimatedFuelPricePerLitre\tfloat\tYES\t\tNULL\t\nestimatedWearTear\tfloat\tYES\t\tNULL\t\nestimatedTimeValue\tfloat\tYES\t\tNULL\t\nestimatedNetProfit\tfloat\tYES\t\tNULL\t\nestimatedProfitPerHour\tfloat\tYES\t\tNULL\t\nestimatedProfitPerMile\tfloat\tYES\t\tNULL\t\nworthItScore\tenum('green','amber','red')\tYES\t\tNULL\t\nactualDistanceMiles\tfloat\tYES\t\tNULL\t\nactualDurationMins\tfloat\tYES\t\tNULL\t\nactualFuelCost\tfloat\tYES\t\tNULL\t\nactualNetProfit\tfloat\tYES\t\tNULL\t\nactualNotes\ttext\tYES\t\tNULL\t\nscheduledPickupAt\ttimestamp\tYES\t\tNULL\t\ncompletedAt\ttimestamp\tYES\t\tNULL\t\nrouteData\tjson\tYES\t\tNULL\t\ncreatedAt\ttimestamp\tNO\t\tCURRENT_TIMESTAMP\t\nupdatedAt\ttimestamp\tNO\t\tCURRENT_TIMESTAMP\tDEFAULT_GENERATED on update CURRENT_TIMESTAMP\nbrokerName\tvarchar(100)\tYES\t\tNULL\t\njobReference\tvarchar(100)\tYES\t\tNULL\t\nbookingImageUrl\ttext\tYES\t\tNULL\t\nnotes\ttext\tYES\t\tNULL\t\nvehicleMake\tvarchar(50)\tYES\t\tNULL\t\nvehicleModel\tvarchar(50)\tYES\t\tNULL\t\nvehicleReg\tvarchar(20)\tYES\t\tNULL\t\nvehicleFuelType\tenum('petrol','diesel','electric','hybrid','unknown')\tYES\t\tunknown\t\nvehicleColour\tvarchar(30)\tYES\t\tNULL\t\nscannedDistanceMiles\tdecimal(8,2)\tYES\t\tNULL\t\nscannedDurationMins\tdecimal(8,2)\tYES\t\tNULL\t\ntravelToJobCost\tdecimal(8,2)\tYES\t\t0\t\ntravelToJobMode\tenum('train','bus','taxi','own_car','none')\tYES\t\tnone\t\ntravelHomePostcode\tvarchar(10)\tYES\t\tNULL\t\ntravelHomeCost\tdecimal(8,2)\tYES\t\t0\t\ntravelHomeMode\tenum('train','bus','taxi','own_car','none')\tYES\t\tnone\t\nbrokerId\tint(11)\tYES\t\tNULL\t\n",
+  "stderr": "",
+  "execution_time_ms": 48
+}

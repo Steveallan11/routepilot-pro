@@ -1,0 +1,9 @@
+{
+  "query": "ALTER TABLE jobs\n  ADD COLUMN scheduledDropoffAt TIMESTAMP NULL,\n  ADD COLUMN pickupContactName VARCHAR(100) NULL,\n  ADD COLUMN pickupContactPhone VARCHAR(30) NULL,\n  ADD COLUMN dropoffContactName VARCHAR(100) NULL,\n  ADD COLUMN dropoffContactPhone VARCHAR(30) NULL,\n  ADD COLUMN customerName VARCHAR(100) NULL,\n  ADD COLUMN travelRouteData JSON NULL;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway02.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 29dmg1z8s7MGkda.cd2f01f00c99 --database 6VTDyDwMUZs22XSbYJviE3 --execute ALTER TABLE jobs\n  ADD COLUMN scheduledDropoffAt TIMESTAMP NULL,\n  ADD COLUMN pickupContactName VARCHAR(100) NULL,\n  ADD COLUMN pickupContactPhone VARCHAR(30) NULL,\n  ADD COLUMN dropoffContactName VARCHAR(100) NULL,\n  ADD COLUMN dropoffContactPhone VARCHAR(30) NULL,\n  ADD COLUMN customerName VARCHAR(100) NULL,\n  ADD COLUMN travelRouteData JSON NULL;",
+  "rows": [],
+  "messages": [],
+  "stdout": "",
+  "stderr": "",
+  "execution_time_ms": 2785
+}

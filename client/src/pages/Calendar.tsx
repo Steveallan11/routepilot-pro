@@ -395,6 +395,29 @@ function WeekView({ jobs, weekStart, onJobClick, onDayClick }: { jobs: Job[]; we
           </div>
         ))}
       </div>
+      {/* Earnings strip */}
+      <div className="grid grid-cols-7 gap-1 mb-2">
+        {days.map(d => {
+          const dayEarnings = jobs
+            .filter(j => { const jd = getJobDate(j); return jd && isSameDay(jd, d) && j.status !== "cancelled"; })
+            .reduce((s, j) => s + (j.actualNetProfit ?? j.estimatedNetProfit ?? 0), 0);
+          return (
+            <div key={d.toISOString()} className="text-center">
+              {dayEarnings !== 0 ? (
+                <span className={cn(
+                  "text-[9px] font-bold font-mono px-1 py-0.5 rounded-md",
+                  dayEarnings > 0 ? "text-primary bg-primary/10" : "text-destructive bg-destructive/10"
+                )}>
+                  {dayEarnings > 0 ? "+" : ""}£{dayEarnings.toFixed(0)}
+                </span>
+              ) : (
+                <span className="text-[9px] text-muted-foreground/30">—</span>
+              )}
+            </div>
+          );
+        })}
+      </div>
+
       <div className="grid grid-cols-7 gap-1">
         {days.map(d => {
           const dayJobs = jobs.filter(j => {

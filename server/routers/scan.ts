@@ -4,72 +4,133 @@ import { invokeLLM } from "../_core/llm";
 import { storagePut } from "../storage";
 import { nanoid } from "nanoid";
 
-// Structured output schema for booking extraction
+// Structured output schema for booking extraction — captures everything visible
 const bookingSchema = {
   type: "object" as const,
   properties: {
+    // Route
     pickupPostcode: {
       type: "string",
-      description: "UK postcode of the pickup/departure location (e.g. MK1 1DF). Extract from the departure address. Return empty string if not found.",
+      description: "UK postcode of the pickup/departure location (e.g. MK1 1DF). Return empty string if not found.",
     },
     dropoffPostcode: {
       type: "string",
-      description: "UK postcode of the dropoff/arrival/destination location (e.g. CR0 4YL). Extract from the arrival address. Return empty string if not found.",
+      description: "UK postcode of the dropoff/arrival/destination location (e.g. CR0 4YL). Return empty string if not found.",
     },
+    pickupAddress: {
+      type: "string",
+      description: "Full pickup/departure address as shown on the booking (e.g. '66 Denbigh Road, Bletchley, MK1 1DF'). Return empty string if not found.",
+    },
+    dropoffAddress: {
+      type: "string",
+      description: "Full dropoff/arrival/destination address as shown. Return empty string if not found.",
+    },
+
+    // Timing
+    scheduledPickupDate: {
+      type: "string",
+      description: "Scheduled pickup date and time in ISO 8601 format (e.g. '2026-02-26T08:30:00'). Return empty string if not found.",
+    },
+    scheduledDropoffDate: {
+      type: "string",
+      description: "Scheduled dropoff/delivery/arrival date and time in ISO 8601 format (e.g. '2026-02-26T11:45:00'). Return empty string if not found.",
+    },
+
+    // Financials
     deliveryFee: {
       type: "number",
-      description: "The payment/remuneration/fee for this job in GBP (e.g. 74.00). Look for £ amounts labelled as remuneration, fee, payment, or rate. Return 0 if not found.",
+      description: "The payment/remuneration/fee for this job in GBP. Look for £ amounts labelled as remuneration, fee, payment, or rate. Return 0 if not found.",
     },
     fuelDeposit: {
       type: "number",
       description: "Any separate fuel deposit or fuel card amount in GBP. Return 0 if not found.",
     },
+
+    // Route metrics
     distanceMiles: {
       type: "number",
-      description: "Distance in miles shown on the booking (e.g. 89). Return 0 if not found.",
+      description: "Distance in miles shown on the booking. Return 0 if not found.",
     },
     durationMins: {
       type: "number",
-      description: "Estimated journey duration in minutes (e.g. 100 for 1 hour 40 mins). Return 0 if not found.",
+      description: "Estimated journey duration in minutes (e.g. 100 for 1h 40m). Return 0 if not found.",
     },
-    pickupAddress: {
-      type: "string",
-      description: "Full pickup/departure address as shown (e.g. '66 Denbigh Road, MK1 1DF Bletchley'). Return empty string if not found.",
-    },
-    dropoffAddress: {
-      type: "string",
-      description: "Full dropoff/arrival address as shown. Return empty string if not found.",
-    },
+
+    // Broker / booking metadata
     brokerName: {
       type: "string",
-      description: "Name of the broker or company (e.g. 'Ald Automotive', 'BCA', 'Movex'). Return empty string if not found.",
-    },
-    scheduledDate: {
-      type: "string",
-      description: "Scheduled pickup date and time in ISO 8601 format (e.g. '2026-02-19T14:00:00'). Return empty string if not found.",
+      description: "Name of the broker or company (e.g. 'Waylands Group', 'BCA', 'Movex', 'ALD Automotive'). Return empty string if not found.",
     },
     jobReference: {
       type: "string",
-      description: "Booking reference or job number (e.g. '#5033851-1450182'). Return empty string if not found.",
+      description: "Booking reference or job number (e.g. '#5033851-1450182', 'JOB-12345'). Return empty string if not found.",
     },
+
+    // Vehicle details
+    vehicleMake: {
+      type: "string",
+      description: "Vehicle manufacturer/make (e.g. 'BMW', 'Ford', 'Toyota'). Return empty string if not found.",
+    },
+    vehicleModel: {
+      type: "string",
+      description: "Vehicle model name (e.g. '3 Series', 'Focus', 'Corolla'). Return empty string if not found.",
+    },
+    vehicleReg: {
+      type: "string",
+      description: "Vehicle registration plate (e.g. 'AB12 CDE'). Return empty string if not found.",
+    },
+    vehicleColour: {
+      type: "string",
+      description: "Vehicle colour (e.g. 'White', 'Black', 'Silver'). Return empty string if not found.",
+    },
+    vehicleFuelType: {
+      type: "string",
+      description: "Vehicle fuel type: one of 'petrol', 'diesel', 'electric', 'hybrid', or 'unknown'. Return 'unknown' if not found.",
+    },
+
+    // Contact / consignee details
+    pickupContactName: {
+      type: "string",
+      description: "Name of the person or company at the pickup location (e.g. 'Daniel Moore', 'BMW Dealership'). Return empty string if not found.",
+    },
+    pickupContactPhone: {
+      type: "string",
+      description: "Phone number for the pickup contact. Return empty string if not found.",
+    },
+    dropoffContactName: {
+      type: "string",
+      description: "Name of the person or company at the dropoff location (e.g. 'Jake Weatherall', 'Waylands Group'). Return empty string if not found.",
+    },
+    dropoffContactPhone: {
+      type: "string",
+      description: "Phone number for the dropoff contact. Return empty string if not found.",
+    },
+    customerName: {
+      type: "string",
+      description: "Name of the customer/owner of the vehicle if different from pickup/dropoff contacts. Return empty string if not found.",
+    },
+
+    // Notes
+    notes: {
+      type: "string",
+      description: "Any additional instructions, special requirements, or notes visible on the booking. Return empty string if not found.",
+    },
+
+    // Confidence
     confidence: {
       type: "number",
-      description: "Your confidence in the extraction from 0 to 1. Use 0.9+ if all key fields found clearly, 0.5-0.9 if some fields uncertain, below 0.5 if image is unclear.",
+      description: "Your confidence in the extraction from 0 to 1. Use 0.9+ if all key fields found clearly.",
     },
   },
   required: [
-    "pickupPostcode",
-    "dropoffPostcode",
-    "deliveryFee",
-    "fuelDeposit",
-    "distanceMiles",
-    "durationMins",
-    "pickupAddress",
-    "dropoffAddress",
-    "brokerName",
-    "scheduledDate",
-    "jobReference",
-    "confidence",
+    "pickupPostcode", "dropoffPostcode", "pickupAddress", "dropoffAddress",
+    "scheduledPickupDate", "scheduledDropoffDate",
+    "deliveryFee", "fuelDeposit", "distanceMiles", "durationMins",
+    "brokerName", "jobReference",
+    "vehicleMake", "vehicleModel", "vehicleReg", "vehicleColour", "vehicleFuelType",
+    "pickupContactName", "pickupContactPhone",
+    "dropoffContactName", "dropoffContactPhone",
+    "customerName", "notes", "confidence",
   ],
   additionalProperties: false,
 };
@@ -79,17 +140,14 @@ export const scanRouter = router({
   uploadImage: publicProcedure
     .input(
       z.object({
-        base64Data: z.string(), // base64 encoded image
+        base64Data: z.string(),
         mimeType: z.string().default("image/jpeg"),
       })
     )
     .mutation(async ({ input }) => {
       const { base64Data, mimeType } = input;
-
-      // Decode base64 to buffer
       const buffer = Buffer.from(base64Data, "base64");
 
-      // Validate size (max 10MB)
       if (buffer.length > 10 * 1024 * 1024) {
         throw new Error("Image too large. Please use an image under 10MB.");
       }
@@ -101,7 +159,7 @@ export const scanRouter = router({
       return { url, key };
     }),
 
-  // Extract booking details from an image URL using LLM vision
+  // Extract ALL booking details from an image URL using LLM vision
   extractBooking: publicProcedure
     .input(
       z.object({
@@ -114,7 +172,7 @@ export const scanRouter = router({
           {
             role: "system",
             content:
-              "You are an expert at reading UK car delivery booking screenshots. Extract all relevant job details from the image and return them as structured JSON. Be precise with UK postcodes — they follow the format like 'MK1 1DF', 'CR0 4YL', 'SW1A 1AA'. If a postcode has no space, add the correct space (e.g. 'CR04YL' → 'CR0 4YL').",
+              "You are an expert at reading UK car delivery and transport booking screenshots. Extract every piece of information visible in the image and return it as structured JSON. Be precise with UK postcodes — they follow the format like 'MK1 1DF', 'CR0 4YL'. If a postcode has no space, add the correct space. Extract vehicle registration plates exactly as shown. Extract all dates and times in ISO 8601 format. Extract all contact names, addresses, and any special instructions.",
           },
           {
             role: "user",
@@ -128,7 +186,7 @@ export const scanRouter = router({
               },
               {
                 type: "text",
-                text: "Please extract all job details from this booking screenshot. Focus on: pickup postcode, dropoff postcode, delivery fee/remuneration, distance in miles, duration in minutes, addresses, broker name, scheduled date/time, and job reference number.",
+                text: "Please extract ALL job details from this booking screenshot. I need: pickup and dropoff full addresses with postcodes, scheduled pickup and dropoff times, delivery fee/remuneration, distance in miles, duration, broker/company name, job reference, vehicle make/model/registration/colour/fuel type, pickup and dropoff contact names and phone numbers, customer name, and any special instructions or notes.",
               },
             ],
           },
@@ -150,29 +208,66 @@ export const scanRouter = router({
 
       const extracted = typeof content === "string" ? JSON.parse(content) : content;
 
-      // Normalise postcode spacing
+      // Normalise UK postcode spacing
       const normalisePostcode = (pc: string): string => {
         if (!pc) return "";
         const clean = pc.replace(/\s+/g, "").toUpperCase();
-        // UK postcode: last 3 chars are always the inward code
         if (clean.length >= 5) {
           return `${clean.slice(0, -3)} ${clean.slice(-3)}`;
         }
         return clean;
       };
 
+      // Normalise vehicle fuel type
+      const normaliseFuelType = (ft: string): "petrol" | "diesel" | "electric" | "hybrid" | "unknown" => {
+        const f = (ft || "").toLowerCase();
+        if (f.includes("petrol")) return "petrol";
+        if (f.includes("diesel")) return "diesel";
+        if (f.includes("electric")) return "electric";
+        if (f.includes("hybrid")) return "hybrid";
+        return "unknown";
+      };
+
       return {
+        // Route
         pickupPostcode: normalisePostcode(extracted.pickupPostcode),
         dropoffPostcode: normalisePostcode(extracted.dropoffPostcode),
-        deliveryFee: Number(extracted.deliveryFee) || 0,
-        fuelDeposit: Number(extracted.fuelDeposit) || 0,
-        distanceMiles: Number(extracted.distanceMiles) || 0,
-        durationMins: Number(extracted.durationMins) || 0,
         pickupAddress: extracted.pickupAddress || "",
         dropoffAddress: extracted.dropoffAddress || "",
+
+        // Timing
+        scheduledDate: extracted.scheduledPickupDate || "",
+        scheduledDropoffDate: extracted.scheduledDropoffDate || "",
+
+        // Financials
+        deliveryFee: Number(extracted.deliveryFee) || 0,
+        fuelDeposit: Number(extracted.fuelDeposit) || 0,
+
+        // Route metrics
+        distanceMiles: Number(extracted.distanceMiles) || 0,
+        durationMins: Number(extracted.durationMins) || 0,
+
+        // Broker / booking
         brokerName: extracted.brokerName || "",
-        scheduledDate: extracted.scheduledDate || "",
         jobReference: extracted.jobReference || "",
+
+        // Vehicle
+        vehicleMake: extracted.vehicleMake || "",
+        vehicleModel: extracted.vehicleModel || "",
+        vehicleReg: (extracted.vehicleReg || "").toUpperCase(),
+        vehicleColour: extracted.vehicleColour || "",
+        vehicleFuelType: normaliseFuelType(extracted.vehicleFuelType),
+
+        // Contacts
+        pickupContactName: extracted.pickupContactName || "",
+        pickupContactPhone: extracted.pickupContactPhone || "",
+        dropoffContactName: extracted.dropoffContactName || "",
+        dropoffContactPhone: extracted.dropoffContactPhone || "",
+        customerName: extracted.customerName || "",
+
+        // Notes
+        notes: extracted.notes || "",
+
         confidence: Number(extracted.confidence) || 0.5,
       };
     }),

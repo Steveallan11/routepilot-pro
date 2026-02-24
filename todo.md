@@ -171,3 +171,15 @@
 - [x] Calendar: "+" button pre-fills scheduled date/time from tapped slot/day
 - [x] Jobs: swipe-right to mark Started, swipe-left to Cancel
 - [x] Dashboard: "Next Job" card taps into full job detail sheet
+
+## Features Round 3
+
+- [x] Calendar: day earnings strip above week/day grid
+- [x] DB: add scheduledDropoffAt, contact fields, travelRouteData to jobs table
+- [x] Server: extend OCR scan to extract full job data (vehicle, contacts, addresses, times)
+- [x] Server: extend jobs create/update to accept all new fields
+- [x] Add Job form: show all new fields, wire up OCR auto-populate
+- [x] Job Detail Sheet: display all new fields (dropoff time, contacts, full vehicle details)
+- [x] Travel Planner: multi-modal step-by-step journey with bus/train/taxi and costs
+- [x] Push notifications: PWA service worker + 30-min job reminder
+- [x] Auto-schedule reminder when a job with a scheduled time is saved

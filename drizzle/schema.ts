@@ -122,6 +122,18 @@ export const jobs = mysqlTable("jobs", {
   travelHomeMode: mysqlEnum("travelHomeMode", ["train", "bus", "taxi", "own_car", "none"]).default("none"),
 
   scheduledPickupAt: timestamp("scheduledPickupAt"),
+  scheduledDropoffAt: timestamp("scheduledDropoffAt"),
+
+  // Contact / consignee info (from scan or manual)
+  pickupContactName: varchar("pickupContactName", { length: 100 }),
+  pickupContactPhone: varchar("pickupContactPhone", { length: 30 }),
+  dropoffContactName: varchar("dropoffContactName", { length: 100 }),
+  dropoffContactPhone: varchar("dropoffContactPhone", { length: 30 }),
+  customerName: varchar("customerName", { length: 100 }),
+
+  // Multi-modal travel route (step-by-step JSON from travel planner)
+  travelRouteData: json("travelRouteData"),
+
   completedAt: timestamp("completedAt"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
