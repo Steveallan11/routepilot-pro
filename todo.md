@@ -273,3 +273,9 @@
 - [x] UI: standaloneJobs = all jobs minus chained job IDs (no duplicates)
 - [x] UI: calendar shows chain as a single grouped card in all 3 views (day/week/month)
 - [x] UI: earnings strip uses standalone job profits + chain totalNetProfit (no double-count)
+
+## Fix: Dashboard Stats Double-Counting Chained Jobs
+- [x] Server: getDashboardStats excludes jobs in saved chains from individual job sums
+- [x] Server: add chain net profits/earnings/miles to today/week totals separately
+- [x] Server: history.summary also deduplicates chained jobs and adds chain totals
+- [x] UI: Today's Profit, Week Profit, job count, and miles all show correct deduplicated figures

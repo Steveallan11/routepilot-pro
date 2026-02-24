@@ -1,6 +1,6 @@
-import { and, eq, gte, sql } from "drizzle-orm";
+import { and, eq, gte, notInArray, sql } from "drizzle-orm";
 import { getDb } from "./db";
-import { jobs, userBadges, userStreaks } from "../drizzle/schema";
+import { chainJobs, jobChains, jobs, userBadges, userStreaks } from "../drizzle/schema";
 
 // ─── Badge Definitions ────────────────────────────────────────────────────────
 
@@ -488,13 +488,27 @@ export async function getDashboardStats(userId: number) {
   const todayStart = startOfToday();
   const weekStart = startOfWeek();
 
-  const [todayStats, weekStats, streakRow, recentJobs] = await Promise.all([
+  // Get all job IDs that belong to a saved chain for this user — exclude these from individual job sums
+  const chainJobRows = await db
+    .select({ jobId: chainJobs.jobId })
+    .from(chainJobs)
+    .innerJoin(jobChains, eq(chainJobs.chainId, jobChains.id))
+    .where(eq(jobChains.userId, userId));
+  const chainedJobIds = chainJobRows.map(r => r.jobId);
+
+  // Build base where clause — exclude chained jobs from individual counts
+  const standaloneFilter = (extraCondition: ReturnType<typeof and>) =>
+    chainedJobIds.length > 0
+      ? and(extraCondition, notInArray(jobs.id, chainedJobIds))
+      : extraCondition;
+
+  const [todayStats, weekStats, streakRow, recentJobs, todayChains, weekChains] = await Promise.all([
     db.select({
       earnings: sql<string>`COALESCE(SUM(deliveryFee + fuelDeposit), 0)`,
       netProfit: sql<string>`COALESCE(SUM(estimatedNetProfit), 0)`,
       jobCount: sql<number>`COUNT(*)`,
       miles: sql<string>`COALESCE(SUM(estimatedDistanceMiles), 0)`,
-    }).from(jobs).where(and(eq(jobs.userId, userId), gte(jobs.createdAt, todayStart))),
+    }).from(jobs).where(standaloneFilter(and(eq(jobs.userId, userId), gte(jobs.createdAt, todayStart))!)),
 
     db.select({
       earnings: sql<string>`COALESCE(SUM(deliveryFee + fuelDeposit), 0)`,
@@ -502,11 +516,11 @@ export async function getDashboardStats(userId: number) {
       jobCount: sql<number>`COUNT(*)`,
       miles: sql<string>`COALESCE(SUM(estimatedDistanceMiles), 0)`,
       avgProfitPerHour: sql<string>`COALESCE(AVG(estimatedProfitPerHour), 0)`,
-    }).from(jobs).where(and(eq(jobs.userId, userId), gte(jobs.createdAt, weekStart))),
+    }).from(jobs).where(standaloneFilter(and(eq(jobs.userId, userId), gte(jobs.createdAt, weekStart))!)),
 
     db.select().from(userStreaks).where(eq(userStreaks.userId, userId)).limit(1),
 
-    // Last 7 days daily breakdown
+    // Last 7 days daily breakdown — standalone jobs only
     db.select({
       day: sql<string>`DATE(createdAt)`,
       earnings: sql<string>`COALESCE(SUM(deliveryFee + fuelDeposit), 0)`,
@@ -514,23 +528,49 @@ export async function getDashboardStats(userId: number) {
       jobCount: sql<number>`COUNT(*)`,
       miles: sql<string>`COALESCE(SUM(estimatedDistanceMiles), 0)`,
     }).from(jobs)
-      .where(and(eq(jobs.userId, userId), gte(jobs.createdAt, weekStart)))
+      .where(standaloneFilter(and(eq(jobs.userId, userId), gte(jobs.createdAt, weekStart))!))
       .groupBy(sql`DATE(createdAt)`)
       .orderBy(sql`DATE(createdAt)`),
+
+    // Today's chains
+    db.select({
+      totalEarnings: sql<string>`COALESCE(SUM(totalEarnings), 0)`,
+      totalNetProfit: sql<string>`COALESCE(SUM(totalNetProfit), 0)`,
+      totalDistanceMiles: sql<string>`COALESCE(SUM(totalDistanceMiles), 0)`,
+      chainCount: sql<number>`COUNT(*)`,
+    }).from(jobChains).where(and(eq(jobChains.userId, userId), gte(jobChains.createdAt, todayStart))),
+
+    // This week's chains
+    db.select({
+      totalEarnings: sql<string>`COALESCE(SUM(totalEarnings), 0)`,
+      totalNetProfit: sql<string>`COALESCE(SUM(totalNetProfit), 0)`,
+      totalDistanceMiles: sql<string>`COALESCE(SUM(totalDistanceMiles), 0)`,
+      chainCount: sql<number>`COUNT(*)`,
+    }).from(jobChains).where(and(eq(jobChains.userId, userId), gte(jobChains.createdAt, weekStart))),
   ]);
+
+  const todayChainEarnings = Number(todayChains[0]?.totalEarnings ?? 0);
+  const todayChainNetProfit = Number(todayChains[0]?.totalNetProfit ?? 0);
+  const todayChainMiles = Number(todayChains[0]?.totalDistanceMiles ?? 0);
+  const todayChainCount = Number(todayChains[0]?.chainCount ?? 0);
+
+  const weekChainEarnings = Number(weekChains[0]?.totalEarnings ?? 0);
+  const weekChainNetProfit = Number(weekChains[0]?.totalNetProfit ?? 0);
+  const weekChainMiles = Number(weekChains[0]?.totalDistanceMiles ?? 0);
+  const weekChainCount = Number(weekChains[0]?.chainCount ?? 0);
 
   return {
     today: {
-      earnings: Number(todayStats[0]?.earnings ?? 0),
-      netProfit: Number(todayStats[0]?.netProfit ?? 0),
-      jobCount: Number(todayStats[0]?.jobCount ?? 0),
-      miles: Number(todayStats[0]?.miles ?? 0),
+      earnings: Number(todayStats[0]?.earnings ?? 0) + todayChainEarnings,
+      netProfit: Number(todayStats[0]?.netProfit ?? 0) + todayChainNetProfit,
+      jobCount: Number(todayStats[0]?.jobCount ?? 0) + todayChainCount,
+      miles: Number(todayStats[0]?.miles ?? 0) + todayChainMiles,
     },
     week: {
-      earnings: Number(weekStats[0]?.earnings ?? 0),
-      netProfit: Number(weekStats[0]?.netProfit ?? 0),
-      jobCount: Number(weekStats[0]?.jobCount ?? 0),
-      miles: Number(weekStats[0]?.miles ?? 0),
+      earnings: Number(weekStats[0]?.earnings ?? 0) + weekChainEarnings,
+      netProfit: Number(weekStats[0]?.netProfit ?? 0) + weekChainNetProfit,
+      jobCount: Number(weekStats[0]?.jobCount ?? 0) + weekChainCount,
+      miles: Number(weekStats[0]?.miles ?? 0) + weekChainMiles,
       avgProfitPerHour: Number(weekStats[0]?.avgProfitPerHour ?? 0),
     },
     streak: streakRow[0] ?? null,

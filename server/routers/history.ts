@@ -2,7 +2,8 @@ import { z } from "zod";
 import { protectedProcedure, router } from "../_core/trpc";
 import { getDb } from "../db";
 import { jobs, jobChains } from "../../drizzle/schema";
-import { eq, and, gte, lte, desc, sql } from "drizzle-orm";
+import { eq, and, gte, lte, desc, sql, notInArray } from "drizzle-orm";
+import { chainJobs } from "../../drizzle/schema";
 
 export const historyRouter = router({
   // Summary stats for a date range
@@ -35,23 +36,48 @@ export const historyRouter = router({
           startDate = new Date(0);
       }
 
+      // Exclude jobs that belong to a saved chain — chains are counted separately
+      const chainJobRows = await db
+        .select({ jobId: chainJobs.jobId })
+        .from(chainJobs)
+        .innerJoin(jobChains, eq(chainJobs.chainId, jobChains.id))
+        .where(eq(jobChains.userId, ctx.user.id));
+      const chainedJobIds = chainJobRows.map(r => r.jobId);
+
+      const baseFilter = and(
+        eq(jobs.userId, ctx.user.id),
+        eq(jobs.status, "completed"),
+        gte(jobs.completedAt, startDate)
+      )!;
+      const standaloneFilter = chainedJobIds.length > 0
+        ? and(baseFilter, notInArray(jobs.id, chainedJobIds))
+        : baseFilter;
+
       const completedJobs = await db.select().from(jobs)
-        .where(and(
-          eq(jobs.userId, ctx.user.id),
-          eq(jobs.status, "completed"),
-          gte(jobs.completedAt, startDate)
-        ))
+        .where(standaloneFilter)
         .orderBy(desc(jobs.completedAt));
 
-      const totalEarnings = completedJobs.reduce((sum, j) => sum + j.deliveryFee + j.fuelDeposit, 0);
-      const totalFuelCost = completedJobs.reduce((sum, j) => sum + (j.actualFuelCost ?? j.estimatedFuelCost ?? 0), 0);
-      const totalNetProfit = completedJobs.reduce((sum, j) => sum + (j.actualNetProfit ?? j.estimatedNetProfit ?? 0), 0);
-      const totalMiles = completedJobs.reduce((sum, j) => sum + (j.actualDistanceMiles ?? j.estimatedDistanceMiles ?? 0), 0);
-      const totalMins = completedJobs.reduce((sum, j) => sum + (j.actualDurationMins ?? j.estimatedDurationMins ?? 0), 0);
+      // Also fetch completed chains in this period
+      const completedChains = await db.select().from(jobChains)
+        .where(and(
+          eq(jobChains.userId, ctx.user.id),
+          eq(jobChains.status, "completed"),
+          gte(jobChains.createdAt, startDate)
+        ));
+
+      const totalEarnings = completedJobs.reduce((sum, j) => sum + Number(j.deliveryFee) + Number(j.fuelDeposit), 0)
+        + completedChains.reduce((sum, c) => sum + Number(c.totalEarnings ?? 0), 0);
+      const totalFuelCost = completedJobs.reduce((sum, j) => sum + Number(j.actualFuelCost ?? j.estimatedFuelCost ?? 0), 0);
+      const totalNetProfit = completedJobs.reduce((sum, j) => sum + Number(j.actualNetProfit ?? j.estimatedNetProfit ?? 0), 0)
+        + completedChains.reduce((sum, c) => sum + Number(c.totalNetProfit ?? 0), 0);
+      const totalMiles = completedJobs.reduce((sum, j) => sum + Number(j.actualDistanceMiles ?? j.estimatedDistanceMiles ?? 0), 0)
+        + completedChains.reduce((sum, c) => sum + Number(c.totalDistanceMiles ?? 0), 0);
+      const totalMins = completedJobs.reduce((sum, j) => sum + Number(j.actualDurationMins ?? j.estimatedDurationMins ?? 0), 0);
+      const jobCount = completedJobs.length + completedChains.length;
 
       return {
         period: input.period,
-        jobCount: completedJobs.length,
+        jobCount,
         totalEarnings,
         totalFuelCost,
         totalNetProfit,
