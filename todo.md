@@ -95,3 +95,21 @@
 - [x] Frontend: Map shows each leg as a polyline with mode icon markers at interchange points
 - [x] Frontend: "Use This Route" button on map view — auto-fills travel cost and mode in calculator
 - [x] Frontend: Add route finder button in Travel Expenses section for quick access
+
+## Feature: Departure Time Picker
+- [ ] Add date/time picker to Route Finder page
+- [ ] Pass departure time to Google Maps Directions API transit request
+- [ ] Show "departing at X" label on route cards
+
+## Feature: Saved Favourite Routes
+- [ ] DB: favouriteRoutes table (userId, name, fromPostcode, toPostcode, defaultMode)
+- [ ] Server: favouriteRoutes router (list, save, delete)
+- [ ] Frontend: "Save as Favourite" button on Route Finder after search
+- [ ] Frontend: Favourites list on Route Finder — tap to pre-fill postcodes and search
+- [ ] Frontend: Quick-load favourite in Travel Expenses section
+
+## Feature: Real-Time UK Train Fares
+- [ ] Research best available UK train fare API (National Rail, TransportAPI, Trainline)
+- [ ] Server: fetch live fare data and attach to transit legs
+- [ ] Frontend: Show actual fare on train legs instead of estimate
+- [ ] Frontend: Show fare breakdown per leg in route card detail view

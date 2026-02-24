@@ -1,17 +1,20 @@
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
 import { MapView } from "@/components/Map";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Separator } from "@/components/ui/separator";
 import { toast } from "sonner";
+import { trpc } from "@/lib/trpc";
+import { useAuth } from "@/_core/hooks/useAuth";
 import {
-  Train, Bus, Car, PersonStanding, Zap, PoundSterling, Clock,
-  ChevronRight, ArrowRight, MapPin, Loader2, CheckCircle2, X,
-  Navigation, TrendingDown, Timer, Scale
+  Train, Bus, Car, PersonStanding, Zap, Clock,
+  ChevronRight, MapPin, Loader2, CheckCircle2,
+  Navigation, TrendingDown, Timer, Scale, Star, StarOff,
+  Trash2, CalendarClock, ChevronDown, ChevronUp
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { format, addMinutes } from "date-fns";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -32,6 +35,7 @@ interface TransitLeg {
   startLocation: { lat: number; lng: number };
   endLocation: { lat: number; lng: number };
   instructions?: string;
+  estimatedFare?: number;
 }
 
 interface RouteOption {
@@ -47,7 +51,22 @@ interface RouteOption {
   warnings: string[];
 }
 
-// ─── Cost estimation ──────────────────────────────────────────────────────────
+// ─── UK Rail fare model (ATOC-based distance bands) ──────────────────────────
+// Based on published UK rail fare data: Anytime Single prices by distance band
+
+function estimateRailFare(distanceKm: number): number {
+  // UK rail fare bands (Anytime Single, approximate)
+  if (distanceKm < 10)  return 3.50;
+  if (distanceKm < 20)  return 6.00;
+  if (distanceKm < 40)  return 10.50;
+  if (distanceKm < 60)  return 15.00;
+  if (distanceKm < 80)  return 19.50;
+  if (distanceKm < 100) return 24.00;
+  if (distanceKm < 150) return 32.00;
+  if (distanceKm < 200) return 42.00;
+  if (distanceKm < 300) return 58.00;
+  return 75.00; // 300km+
+}
 
 function estimateCost(legs: TransitLeg[]): number {
   let cost = 0;
@@ -55,16 +74,22 @@ function estimateCost(legs: TransitLeg[]): number {
     if (leg.mode === "TRANSIT") {
       const distKm = leg.distanceMetres / 1000;
       if (leg.transitMode === "TRAIN" || leg.transitMode === "RAIL") {
-        // UK rail: roughly £0.20/km with £2 base
-        cost += 2 + distKm * 0.20;
+        const fare = estimateRailFare(distKm);
+        leg.estimatedFare = fare;
+        cost += fare;
+      } else if (leg.transitMode === "SUBWAY") {
+        // London Underground: zone-based, typical £2.80–£5.25
+        leg.estimatedFare = distKm < 10 ? 2.80 : 4.50;
+        cost += leg.estimatedFare;
       } else if (leg.transitMode === "BUS" || leg.transitMode === "TRAM") {
-        // UK bus: ~£2.50 flat cap per journey
-        cost += 2.50;
+        // UK bus: £2.00 cap (England bus fare cap)
+        leg.estimatedFare = 2.00;
+        cost += 2.00;
       } else {
-        cost += 1.50 + distKm * 0.10;
+        leg.estimatedFare = 2.50;
+        cost += 2.50;
       }
     }
-    // Walking is free; driving handled separately
   }
   return Math.round(cost * 100) / 100;
 }
@@ -72,14 +97,14 @@ function estimateCost(legs: TransitLeg[]): number {
 // ─── Colour coding ────────────────────────────────────────────────────────────
 
 const LEG_COLOURS: Record<string, string> = {
-  TRAIN: "#3B82F6",   // blue
+  TRAIN: "#3B82F6",
   RAIL: "#3B82F6",
-  SUBWAY: "#8B5CF6",  // purple
-  BUS: "#F97316",     // orange
-  TRAM: "#10B981",    // green
-  FERRY: "#06B6D4",   // cyan
-  WALKING: "#6B7280", // grey
-  DRIVING: "#EF4444", // red
+  SUBWAY: "#8B5CF6",
+  BUS: "#F97316",
+  TRAM: "#10B981",
+  FERRY: "#06B6D4",
+  WALKING: "#6B7280",
+  DRIVING: "#EF4444",
 };
 
 function getLegColour(leg: TransitLeg): string {
@@ -94,7 +119,6 @@ function getLegIcon(leg: TransitLeg) {
   switch (leg.transitMode) {
     case "TRAIN": case "RAIL": return <Train size={14} />;
     case "BUS": return <Bus size={14} />;
-    case "TRAM": return <Train size={14} />;
     default: return <Train size={14} />;
   }
 }
@@ -106,7 +130,7 @@ function formatDuration(secs: number): string {
   return `${m} min`;
 }
 
-// ─── Parse Google Directions transit result ───────────────────────────────────
+// ─── Parse Google Directions result ──────────────────────────────────────────
 
 function parseTransitResult(route: google.maps.DirectionsRoute): TransitLeg[] {
   const legs: TransitLeg[] = [];
@@ -135,18 +159,14 @@ function parseTransitResult(route: google.maps.DirectionsRoute): TransitLeg[] {
           numStops: transitDetails.num_stops ?? 0,
           durationSecs: step.duration?.value ?? 0,
           distanceMetres: step.distance?.value ?? 0,
-          polyline,
-          startLocation: startLoc,
-          endLocation: endLoc,
+          polyline, startLocation: startLoc, endLocation: endLoc,
         });
       } else if (mode === "WALKING") {
         legs.push({
           mode: "WALKING",
           durationSecs: step.duration?.value ?? 0,
           distanceMetres: step.distance?.value ?? 0,
-          polyline,
-          startLocation: startLoc,
-          endLocation: endLoc,
+          polyline, startLocation: startLoc, endLocation: endLoc,
           instructions: step.instructions ?? "",
         });
       } else {
@@ -154,9 +174,7 @@ function parseTransitResult(route: google.maps.DirectionsRoute): TransitLeg[] {
           mode: "DRIVING",
           durationSecs: step.duration?.value ?? 0,
           distanceMetres: step.distance?.value ?? 0,
-          polyline,
-          startLocation: startLoc,
-          endLocation: endLoc,
+          polyline, startLocation: startLoc, endLocation: endLoc,
           instructions: step.instructions ?? "",
         });
       }
@@ -174,29 +192,57 @@ interface RouteFinderProps {
 }
 
 export default function RouteFinder({ initialFrom = "", initialTo = "", onUseRoute }: RouteFinderProps) {
+  const { isAuthenticated } = useAuth();
   const [from, setFrom] = useState(initialFrom);
   const [to, setTo] = useState(initialTo);
   const [loading, setLoading] = useState(false);
   const [routes, setRoutes] = useState<RouteOption[]>([]);
   const [selectedRoute, setSelectedRoute] = useState<RouteOption | null>(null);
   const [mapReady, setMapReady] = useState(false);
+  const [showTimeOptions, setShowTimeOptions] = useState(false);
+  const [departureMode, setDepartureMode] = useState<"now" | "custom">("now");
+  const [departureDate, setDepartureDate] = useState(() => format(new Date(), "yyyy-MM-dd"));
+  const [departureTime, setDepartureTime] = useState(() => format(addMinutes(new Date(), 5), "HH:mm"));
+  const [showFavourites, setShowFavourites] = useState(false);
+  const [savingFav, setSavingFav] = useState(false);
+  const [favName, setFavName] = useState("");
+  const [showSaveFav, setShowSaveFav] = useState(false);
+
   const mapRef = useRef<google.maps.Map | null>(null);
-  const renderersRef = useRef<google.maps.DirectionsRenderer[]>([]);
+  const polylinesRef = useRef<google.maps.Polyline[]>([]);
   const markersRef = useRef<google.maps.marker.AdvancedMarkerElement[]>([]);
 
-  // Clear map overlays
+  // tRPC: favourites
+  const { data: favourites, refetch: refetchFavs } = trpc.routes.listFavourites.useQuery(undefined, {
+    enabled: isAuthenticated,
+  });
+  const saveFavMutation = trpc.routes.saveFavourite.useMutation({
+    onSuccess: () => { refetchFavs(); setShowSaveFav(false); setFavName(""); toast.success("Route saved to favourites"); },
+    onError: () => toast.error("Failed to save favourite"),
+  });
+  const deleteFavMutation = trpc.routes.deleteFavourite.useMutation({
+    onSuccess: () => refetchFavs(),
+  });
+
+  // Read URL params on mount
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const f = params.get("from");
+    const t = params.get("to");
+    if (f) setFrom(f.toUpperCase());
+    if (t) setTo(t.toUpperCase());
+  }, []);
+
   const clearMap = useCallback(() => {
-    renderersRef.current.forEach(r => r.setMap(null));
-    renderersRef.current = [];
+    polylinesRef.current.forEach(p => p.setMap(null));
+    polylinesRef.current = [];
     markersRef.current.forEach(m => { m.map = null; });
     markersRef.current = [];
   }, []);
 
-  // Draw a route on the map with colour-coded polylines per leg
   const drawRoute = useCallback((route: RouteOption) => {
     if (!mapRef.current) return;
     clearMap();
-
     const bounds = new window.google.maps.LatLngBounds();
 
     route.legs.forEach((leg, i) => {
@@ -211,63 +257,47 @@ export default function RouteFinder({ initialFrom = "", initialTo = "", onUseRou
         strokeWeight: leg.mode === "WALKING" ? 3 : 5,
         icons: leg.mode === "WALKING" ? [{
           icon: { path: "M 0,-1 0,1", strokeOpacity: 1, scale: 3 },
-          offset: "0",
-          repeat: "12px",
+          offset: "0", repeat: "12px",
         }] : undefined,
       });
       polyline.setMap(mapRef.current!);
+      polylinesRef.current.push(polyline);
 
-      // Interchange marker at start of each leg (except first)
       if (i > 0) {
-        const markerEl = document.createElement("div");
-        markerEl.style.cssText = `
-          width: 10px; height: 10px;
-          background: ${colour};
-          border: 2px solid white;
-          border-radius: 50%;
-          box-shadow: 0 1px 4px rgba(0,0,0,0.4);
-        `;
-        const marker = new window.google.maps.marker.AdvancedMarkerElement({
-          map: mapRef.current!,
-          position: leg.startLocation,
-          content: markerEl,
+        const el = document.createElement("div");
+        el.style.cssText = `width:10px;height:10px;background:${colour};border:2px solid white;border-radius:50%;box-shadow:0 1px 4px rgba(0,0,0,0.4)`;
+        markersRef.current.push(new window.google.maps.marker.AdvancedMarkerElement({
+          map: mapRef.current!, position: leg.startLocation, content: el,
           title: leg.departureStop ?? leg.mode,
-        });
-        markersRef.current.push(marker);
+        }));
       }
     });
 
-    // Start marker (green)
     const startEl = document.createElement("div");
     startEl.innerHTML = `<div style="background:#22C55E;color:white;padding:4px 8px;border-radius:12px;font-size:11px;font-weight:700;white-space:nowrap;box-shadow:0 2px 6px rgba(0,0,0,0.4)">▶ ${from.toUpperCase()}</div>`;
     markersRef.current.push(new window.google.maps.marker.AdvancedMarkerElement({
-      map: mapRef.current!,
-      position: route.legs[0].startLocation,
-      content: startEl,
+      map: mapRef.current!, position: route.legs[0].startLocation, content: startEl,
     }));
 
-    // End marker (red)
     const endEl = document.createElement("div");
-    endEl.innerHTML = `<div style="background:#EF4444;color:white;padding:4px 8px;border-radius:12px;font-size:11px;font-weight:700;white-space:nowrap;box-shadow:0 2px 6px rgba(0,0,0,0.4)">⬛ ${to.toUpperCase()}</div>`;
+    endEl.innerHTML = `<div style="background:#EF4444;color:white;padding:4px 8px;border-radius:12px;font-size:11px;font-weight:700;white-space:nowrap;box-shadow:0 2px 6px rgba(0,0,0,0.4)">■ ${to.toUpperCase()}</div>`;
     markersRef.current.push(new window.google.maps.marker.AdvancedMarkerElement({
-      map: mapRef.current!,
-      position: route.legs[route.legs.length - 1].endLocation,
-      content: endEl,
+      map: mapRef.current!, position: route.legs[route.legs.length - 1].endLocation, content: endEl,
     }));
 
     mapRef.current!.fitBounds(bounds, { top: 60, bottom: 60, left: 20, right: 20 });
   }, [clearMap, from, to]);
 
-  // Search routes using Google Maps Directions API (frontend)
+  const getDepartureDate = useCallback((): Date => {
+    if (departureMode === "now") return new Date();
+    const [y, mo, d] = departureDate.split("-").map(Number);
+    const [h, mi] = departureTime.split(":").map(Number);
+    return new Date(y, mo - 1, d, h, mi);
+  }, [departureMode, departureDate, departureTime]);
+
   const searchRoutes = useCallback(async () => {
-    if (!from.trim() || !to.trim()) {
-      toast.error("Please enter both postcodes");
-      return;
-    }
-    if (!mapRef.current) {
-      toast.error("Map not ready yet — please wait a moment");
-      return;
-    }
+    if (!from.trim() || !to.trim()) { toast.error("Please enter both postcodes"); return; }
+    if (!mapRef.current) { toast.error("Map not ready yet"); return; }
     setLoading(true);
     setRoutes([]);
     setSelectedRoute(null);
@@ -275,15 +305,15 @@ export default function RouteFinder({ initialFrom = "", initialTo = "", onUseRou
 
     try {
       const directionsService = new window.google.maps.DirectionsService();
+      const depTime = getDepartureDate();
 
-      // Fetch transit options (multiple alternatives)
       const transitRequest: google.maps.DirectionsRequest = {
         origin: `${from.trim()}, UK`,
         destination: `${to.trim()}, UK`,
         travelMode: google.maps.TravelMode.TRANSIT,
         provideRouteAlternatives: true,
         transitOptions: {
-          departureTime: new Date(),
+          departureTime: depTime,
           modes: [
             google.maps.TransitMode.BUS,
             google.maps.TransitMode.RAIL,
@@ -296,7 +326,6 @@ export default function RouteFinder({ initialFrom = "", initialTo = "", onUseRou
         unitSystem: google.maps.UnitSystem.IMPERIAL,
       };
 
-      // Also fetch driving for comparison
       const drivingRequest: google.maps.DirectionsRequest = {
         origin: `${from.trim()}, UK`,
         destination: `${to.trim()}, UK`,
@@ -319,14 +348,12 @@ export default function RouteFinder({ initialFrom = "", initialTo = "", onUseRou
 
       const candidates: RouteOption[] = [];
 
-      // Process transit routes
       if (transitResult.status === "fulfilled") {
-        const res = transitResult.value;
-        res.routes.forEach((route, idx) => {
+        transitResult.value.routes.forEach((route, idx) => {
           const legs = parseTransitResult(route);
+          const cost = estimateCost(legs);
           const totalDuration = route.legs.reduce((s, l) => s + (l.duration?.value ?? 0), 0);
           const totalDistance = route.legs.reduce((s, l) => s + (l.distance?.value ?? 0), 0);
-          const cost = estimateCost(legs);
           const firstLeg = route.legs[0];
           const lastLeg = route.legs[route.legs.length - 1];
           candidates.push({
@@ -344,16 +371,14 @@ export default function RouteFinder({ initialFrom = "", initialTo = "", onUseRou
         });
       }
 
-      // Process driving route
       if (drivingResult.status === "fulfilled") {
-        const res = drivingResult.value;
-        const route = res.routes[0];
+        const route = drivingResult.value.routes[0];
         if (route) {
           const legs = parseTransitResult(route);
           const totalDuration = route.legs.reduce((s, l) => s + (l.duration?.value ?? 0), 0);
           const totalDistance = route.legs.reduce((s, l) => s + (l.distance?.value ?? 0), 0);
           const distMiles = totalDistance / 1609.34;
-          const drivingCost = distMiles * 0.15 + 5; // ~15p/mile + parking estimate
+          const drivingCost = distMiles * 0.15 + 5;
           candidates.push({
             id: "driving",
             label: "fastest",
@@ -368,51 +393,35 @@ export default function RouteFinder({ initialFrom = "", initialTo = "", onUseRou
       }
 
       if (candidates.length === 0) {
-        toast.error("No routes found between these postcodes. Try nearby towns instead.");
+        toast.error("No routes found. Try nearby town names instead of postcodes.");
         setLoading(false);
         return;
       }
 
-      // Rank: fastest = lowest duration, cheapest = lowest cost, balanced = best cost/time ratio
       const sorted = [...candidates].sort((a, b) => a.totalDurationSecs - b.totalDurationSecs);
       const byCost = [...candidates].sort((a, b) => a.estimatedCost - b.estimatedCost);
       const byBalance = [...candidates].sort((a, b) => {
-        const scoreA = a.estimatedCost + (a.totalDurationSecs / 60) * 0.25;
-        const scoreB = b.estimatedCost + (b.totalDurationSecs / 60) * 0.25;
+        const scoreA = a.estimatedCost + (a.totalDurationSecs / 60) * 0.20;
+        const scoreB = b.estimatedCost + (b.totalDurationSecs / 60) * 0.20;
         return scoreA - scoreB;
       });
 
       const labelled: RouteOption[] = [];
       const used = new Set<string>();
-
       const addUnique = (r: RouteOption, label: RouteOption["label"]) => {
-        if (!used.has(r.id)) {
-          used.add(r.id);
-          labelled.push({ ...r, label });
-        } else {
-          // Still show it but with a different label if it's the same route
-          labelled.push({ ...r, id: `${r.id}-${label}`, label });
-        }
+        if (!used.has(r.id)) { used.add(r.id); labelled.push({ ...r, label }); }
+        else labelled.push({ ...r, id: `${r.id}-${label}`, label });
       };
-
       addUnique(sorted[0], "fastest");
       addUnique(byCost[0], "cheapest");
       addUnique(byBalance[0], "balanced");
-
-      // Add remaining unique routes
-      candidates.forEach(r => {
-        if (!used.has(r.id)) {
-          used.add(r.id);
-          labelled.push(r);
-        }
-      });
+      candidates.forEach(r => { if (!used.has(r.id)) { used.add(r.id); labelled.push(r); } });
 
       setRoutes(labelled);
-
-      // Auto-select and draw the balanced route
       const balanced = labelled.find(r => r.label === "balanced") ?? labelled[0];
       setSelectedRoute(balanced);
       drawRoute(balanced);
+      setShowSaveFav(true);
 
     } catch (err) {
       console.error(err);
@@ -420,7 +429,7 @@ export default function RouteFinder({ initialFrom = "", initialTo = "", onUseRou
     } finally {
       setLoading(false);
     }
-  }, [from, to, clearMap, drawRoute]);
+  }, [from, to, clearMap, drawRoute, getDepartureDate]);
 
   const handleSelectRoute = useCallback((route: RouteOption) => {
     setSelectedRoute(route);
@@ -433,8 +442,12 @@ export default function RouteFinder({ initialFrom = "", initialTo = "", onUseRou
     balanced: { icon: <Scale size={12} />, colour: "text-amber-400 border-amber-400/30 bg-amber-400/10", label: "Best Value" },
   };
 
+  const depLabel = departureMode === "now"
+    ? "Departing now"
+    : `Departing ${format(getDepartureDate(), "EEE d MMM 'at' HH:mm")}`;
+
   return (
-    <div className="flex flex-col min-h-screen bg-background pb-20">
+    <div className="flex flex-col min-h-screen bg-background pb-24">
       {/* Header */}
       <div className="sticky top-0 z-10 bg-background border-b border-border px-4 py-3">
         <h1 className="text-lg font-bold text-foreground flex items-center gap-2">
@@ -445,6 +458,49 @@ export default function RouteFinder({ initialFrom = "", initialTo = "", onUseRou
       </div>
 
       <div className="px-4 py-4 space-y-4">
+
+        {/* Favourites bar */}
+        {isAuthenticated && (favourites?.length ?? 0) > 0 && (
+          <Card className="bg-card border-border">
+            <div
+              className="flex items-center justify-between px-4 py-2.5 cursor-pointer"
+              onClick={() => setShowFavourites(s => !s)}
+            >
+              <div className="flex items-center gap-2 text-sm font-medium text-foreground">
+                <Star size={14} className="text-amber-400" />
+                Saved Routes ({favourites!.length})
+              </div>
+              {showFavourites ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+            </div>
+            {showFavourites && (
+              <div className="px-4 pb-3 space-y-2 border-t border-border pt-2">
+                {favourites!.map((fav: any) => (
+                  <div key={fav.id} className="flex items-center gap-2">
+                    <button
+                      className="flex-1 text-left text-sm text-foreground bg-input rounded-lg px-3 py-2 hover:bg-muted transition-colors"
+                      onClick={() => {
+                        setFrom(fav.fromPostcode);
+                        setTo(fav.toPostcode);
+                        setShowFavourites(false);
+                        toast.info(`Loaded: ${fav.name}`);
+                      }}
+                    >
+                      <div className="font-medium">{fav.name}</div>
+                      <div className="text-xs text-muted-foreground">{fav.fromPostcode} → {fav.toPostcode}</div>
+                    </button>
+                    <button
+                      className="p-2 text-muted-foreground hover:text-destructive transition-colors"
+                      onClick={() => deleteFavMutation.mutate({ id: fav.id })}
+                    >
+                      <Trash2 size={14} />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </Card>
+        )}
+
         {/* Search inputs */}
         <Card className="bg-card border-border">
           <CardContent className="pt-4 space-y-3">
@@ -460,17 +516,75 @@ export default function RouteFinder({ initialFrom = "", initialTo = "", onUseRou
                   value={from}
                   onChange={e => setFrom(e.target.value.toUpperCase())}
                   className="bg-input border-border text-sm uppercase"
-                  maxLength={8}
+                  maxLength={10}
                 />
                 <Input
                   placeholder="To postcode (e.g. CR0 4YL)"
                   value={to}
                   onChange={e => setTo(e.target.value.toUpperCase())}
                   className="bg-input border-border text-sm uppercase"
-                  maxLength={8}
+                  maxLength={10}
                 />
               </div>
             </div>
+
+            {/* Departure time */}
+            <div>
+              <button
+                className="flex items-center gap-2 text-xs text-muted-foreground hover:text-foreground transition-colors w-full"
+                onClick={() => setShowTimeOptions(s => !s)}
+              >
+                <CalendarClock size={13} className="text-primary" />
+                <span className="flex-1 text-left">{depLabel}</span>
+                {showTimeOptions ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
+              </button>
+              {showTimeOptions && (
+                <div className="mt-2 space-y-2 pl-5">
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => setDepartureMode("now")}
+                      className={cn(
+                        "flex-1 text-xs py-1.5 rounded-lg border transition-colors",
+                        departureMode === "now"
+                          ? "border-primary bg-primary/10 text-primary font-semibold"
+                          : "border-border text-muted-foreground"
+                      )}
+                    >
+                      Depart Now
+                    </button>
+                    <button
+                      onClick={() => setDepartureMode("custom")}
+                      className={cn(
+                        "flex-1 text-xs py-1.5 rounded-lg border transition-colors",
+                        departureMode === "custom"
+                          ? "border-primary bg-primary/10 text-primary font-semibold"
+                          : "border-border text-muted-foreground"
+                      )}
+                    >
+                      Choose Time
+                    </button>
+                  </div>
+                  {departureMode === "custom" && (
+                    <div className="grid grid-cols-2 gap-2">
+                      <Input
+                        type="date"
+                        value={departureDate}
+                        onChange={e => setDepartureDate(e.target.value)}
+                        className="bg-input border-border text-xs"
+                        min={format(new Date(), "yyyy-MM-dd")}
+                      />
+                      <Input
+                        type="time"
+                        value={departureTime}
+                        onChange={e => setDepartureTime(e.target.value)}
+                        className="bg-input border-border text-xs"
+                      />
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
             <Button
               onClick={searchRoutes}
               disabled={loading || !mapReady}
@@ -494,12 +608,8 @@ export default function RouteFinder({ initialFrom = "", initialTo = "", onUseRou
               initialCenter={{ lat: 52.5, lng: -1.5 }}
               initialZoom={6}
               className="h-72 w-full"
-              onMapReady={(map) => {
-                mapRef.current = map;
-                setMapReady(true);
-              }}
+              onMapReady={(map) => { mapRef.current = map; setMapReady(true); }}
             />
-            {/* Legend */}
             {selectedRoute && (
               <div className="absolute bottom-2 left-2 bg-background/90 backdrop-blur-sm rounded-lg p-2 text-xs space-y-1 border border-border">
                 {Array.from(new Set(selectedRoute.legs.map(l =>
@@ -515,20 +625,53 @@ export default function RouteFinder({ initialFrom = "", initialTo = "", onUseRou
           </div>
         </Card>
 
+        {/* Save as favourite (shown after search) */}
+        {showSaveFav && isAuthenticated && routes.length > 0 && (
+          <Card className="bg-card border-border">
+            <CardContent className="pt-3 pb-3">
+              <div className="flex items-center gap-2">
+                <Star size={14} className="text-amber-400 flex-shrink-0" />
+                <Input
+                  placeholder="Name this route (e.g. Home → ALD depot)"
+                  value={favName}
+                  onChange={e => setFavName(e.target.value)}
+                  className="bg-input border-border text-sm flex-1"
+                />
+                <Button
+                  size="sm"
+                  disabled={!favName.trim() || savingFav}
+                  onClick={async () => {
+                    setSavingFav(true);
+                    try {
+                      await saveFavMutation.mutateAsync({ name: favName.trim(), fromPostcode: from, toPostcode: to });
+                    } finally { setSavingFav(false); }
+                  }}
+                  className="bg-amber-500 hover:bg-amber-600 text-white text-xs px-3"
+                >
+                  {savingFav ? <Loader2 size={12} className="animate-spin" /> : "Save"}
+                </Button>
+                <button onClick={() => setShowSaveFav(false)} className="text-muted-foreground hover:text-foreground">
+                  ×
+                </button>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
         {/* Route options */}
         {routes.length > 0 && (
           <div className="space-y-3">
             <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
               {routes.length} Route{routes.length > 1 ? "s" : ""} Found
+              {departureMode === "custom" && (
+                <span className="ml-2 text-primary normal-case font-normal">
+                  · {format(getDepartureDate(), "EEE d MMM HH:mm")}
+                </span>
+              )}
             </h2>
             {routes.map(route => {
               const cfg = labelConfig[route.label] ?? labelConfig.balanced;
               const isSelected = selectedRoute?.id === route.id;
-              const transitModes = Array.from(new Set(
-                route.legs
-                  .filter(l => l.mode === "TRANSIT")
-                  .map(l => l.transitMode ?? "BUS")
-              ));
 
               return (
                 <Card
@@ -540,7 +683,6 @@ export default function RouteFinder({ initialFrom = "", initialTo = "", onUseRou
                   onClick={() => handleSelectRoute(route)}
                 >
                   <CardContent className="pt-4 pb-3 space-y-3">
-                    {/* Header row */}
                     <div className="flex items-start justify-between">
                       <div className="flex items-center gap-2 flex-wrap">
                         <Badge variant="outline" className={cn("text-xs flex items-center gap-1", cfg.colour)}>
@@ -556,11 +698,12 @@ export default function RouteFinder({ initialFrom = "", initialTo = "", onUseRou
                         <div className="text-lg font-bold text-foreground">
                           ~£{route.estimatedCost.toFixed(2)}
                         </div>
-                        <div className="text-xs text-muted-foreground">estimated fare</div>
+                        <div className="text-xs text-muted-foreground">
+                          {route.legs.some(l => l.mode === "TRANSIT") ? "est. fare" : "est. cost"}
+                        </div>
                       </div>
                     </div>
 
-                    {/* Stats row */}
                     <div className="flex items-center gap-4 text-sm">
                       <div className="flex items-center gap-1 text-foreground font-semibold">
                         <Clock size={13} className="text-muted-foreground" />
@@ -571,14 +714,10 @@ export default function RouteFinder({ initialFrom = "", initialTo = "", onUseRou
                         {(route.totalDistanceMetres / 1609.34).toFixed(1)} mi
                       </div>
                       {route.departureTime && (
-                        <div className="text-xs text-muted-foreground">
-                          Dep. {route.departureTime}
-                        </div>
+                        <div className="text-xs text-muted-foreground">Dep. {route.departureTime}</div>
                       )}
                       {route.arrivalTime && (
-                        <div className="text-xs text-muted-foreground">
-                          Arr. {route.arrivalTime}
-                        </div>
+                        <div className="text-xs text-muted-foreground">Arr. {route.arrivalTime}</div>
                       )}
                     </div>
 
@@ -608,7 +747,7 @@ export default function RouteFinder({ initialFrom = "", initialTo = "", onUseRou
                       ))}
                     </div>
 
-                    {/* Step-by-step breakdown */}
+                    {/* Expanded step-by-step */}
                     {isSelected && (
                       <div className="mt-2 space-y-1.5 border-t border-border pt-2">
                         {route.legs.map((leg, i) => (
@@ -628,6 +767,12 @@ export default function RouteFinder({ initialFrom = "", initialTo = "", onUseRou
                                   {leg.departureStop && ` from ${leg.departureStop}`}
                                   {leg.arrivalStop && ` → ${leg.arrivalStop}`}
                                   {leg.numStops ? ` (${leg.numStops} stops)` : ""}
+                                  {leg.departureTime && ` · dep. ${leg.departureTime}`}
+                                  {leg.estimatedFare !== undefined && (
+                                    <span className="ml-1 text-green-400 font-semibold">
+                                      ~£{leg.estimatedFare.toFixed(2)}
+                                    </span>
+                                  )}
                                 </span>
                               ) : leg.mode === "WALKING" ? (
                                 <span className="text-muted-foreground">
@@ -646,17 +791,21 @@ export default function RouteFinder({ initialFrom = "", initialTo = "", onUseRou
                             </span>
                           </div>
                         ))}
+                        {/* Fare note */}
+                        {route.legs.some(l => l.mode === "TRANSIT") && (
+                          <p className="text-xs text-muted-foreground mt-1 italic">
+                            Fares based on UK Anytime Single rates. Advance tickets may be cheaper.
+                          </p>
+                        )}
                       </div>
                     )}
 
-                    {/* Warnings */}
                     {route.warnings.length > 0 && (
                       <div className="text-xs text-amber-400 bg-amber-400/10 rounded p-2">
                         {route.warnings[0]}
                       </div>
                     )}
 
-                    {/* Use this route button */}
                     {isSelected && onUseRoute && (
                       <Button
                         size="sm"
@@ -679,12 +828,14 @@ export default function RouteFinder({ initialFrom = "", initialTo = "", onUseRou
           </div>
         )}
 
-        {/* Empty state */}
         {routes.length === 0 && !loading && (
           <div className="text-center py-12 text-muted-foreground">
             <Navigation size={40} className="mx-auto mb-3 opacity-30" />
             <p className="text-sm font-medium">Enter postcodes above to find routes</p>
-            <p className="text-xs mt-1">Compares train, bus, and driving options</p>
+            <p className="text-xs mt-1">Compares train, bus, and driving options in real time</p>
+            {!isAuthenticated && (
+              <p className="text-xs mt-2 text-primary">Sign in to save favourite routes</p>
+            )}
           </div>
         )}
       </div>

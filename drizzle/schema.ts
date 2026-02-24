@@ -195,3 +195,17 @@ export const receipts = mysqlTable("receipts", {
 
 export type Receipt = typeof receipts.$inferSelect;
 export type InsertReceipt = typeof receipts.$inferInsert;
+
+// ─── Favourite Routes ─────────────────────────────────────────────────────────
+
+export const favouriteRoutes = mysqlTable("favourite_routes", {
+  id: int("id").autoincrement().primaryKey(),
+  userId: int("userId").notNull(),
+  name: varchar("name", { length: 100 }).notNull(),
+  fromPostcode: varchar("fromPostcode", { length: 10 }).notNull(),
+  toPostcode: varchar("toPostcode", { length: 10 }).notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type FavouriteRoute = typeof favouriteRoutes.$inferSelect;
+export type InsertFavouriteRoute = typeof favouriteRoutes.$inferInsert;

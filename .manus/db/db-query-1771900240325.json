@@ -1,0 +1,9 @@
+{
+  "query": "CREATE TABLE IF NOT EXISTS `favourite_routes` (\n  `id` int NOT NULL AUTO_INCREMENT,\n  `userId` int NOT NULL,\n  `name` varchar(100) NOT NULL,\n  `fromPostcode` varchar(10) NOT NULL,\n  `toPostcode` varchar(10) NOT NULL,\n  `createdAt` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,\n  PRIMARY KEY (`id`),\n  KEY `idx_favourite_routes_userId` (`userId`)\n);",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway02.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 29dmg1z8s7MGkda.cd2f01f00c99 --database 6VTDyDwMUZs22XSbYJviE3 --execute CREATE TABLE IF NOT EXISTS `favourite_routes` (\n  `id` int NOT NULL AUTO_INCREMENT,\n  `userId` int NOT NULL,\n  `name` varchar(100) NOT NULL,\n  `fromPostcode` varchar(10) NOT NULL,\n  `toPostcode` varchar(10) NOT NULL,\n  `createdAt` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,\n  PRIMARY KEY (`id`),\n  KEY `idx_favourite_routes_userId` (`userId`)\n);",
+  "rows": [],
+  "messages": [],
+  "stdout": "",
+  "stderr": "",
+  "execution_time_ms": 233
+}
