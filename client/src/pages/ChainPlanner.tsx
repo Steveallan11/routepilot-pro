@@ -38,21 +38,31 @@ const ScooterIcon = ({ size = 14 }: { size?: number }) => (
 
 const modeIcons: Record<string, React.ReactNode> = {
   train: <Train size={14} />,
+  Train: <Train size={14} />,
   TRAIN: <Train size={14} />,
   RAIL: <Train size={14} />,
   bus: <Bus size={14} />,
+  Bus: <Bus size={14} />,
   BUS: <Bus size={14} />,
   tram: <Train size={14} />,
+  Tram: <Train size={14} />,
   TRAM: <Train size={14} />,
   SUBWAY: <Train size={14} />,
+  Subway: <Train size={14} />,
   taxi: <Car size={14} />,
+  Taxi: <Car size={14} />,
+  TAXI: <Car size={14} />,
   OTHER: <Car size={14} />,
   walk: <Footprints size={14} />,
+  Walk: <Footprints size={14} />,
   WALK: <Footprints size={14} />,
   drive: <Car size={14} />,
   scooter: <ScooterIcon size={14} />,
   Scooter: <ScooterIcon size={14} />,
   SCOOTER: <ScooterIcon size={14} />,
+  ferry: <Navigation size={14} />,
+  Ferry: <Navigation size={14} />,
+  FERRY: <Navigation size={14} />,
 };
 
 const stepModeColors: Record<string, string> = {
@@ -64,6 +74,8 @@ const stepModeColors: Record<string, string> = {
   SUBWAY: "text-indigo-400",
   OTHER: "text-yellow-400",
   SCOOTER: "text-orange-400",
+  TAXI: "text-yellow-400",
+  FERRY: "text-cyan-400",
 };
 
 function StepDetail({ step }: { step: TransitStep }) {
@@ -192,7 +204,133 @@ type ChainResult = {
   riskFlags: string[];
 };
 
-// Expandable transport leg card
+// ============================================================================
+// Multimodal Step Editor — per-step add/remove/edit within a transport leg
+// ============================================================================
+
+const STEP_MODES = ["WALK", "BUS", "TRAIN", "TRAM", "SUBWAY", "TAXI", "SCOOTER", "FERRY"] as const;
+const STEP_MODE_COSTS: Record<string, number> = {
+  WALK: 0, BUS: 2.5, TRAIN: 8.5, TRAM: 2.5, SUBWAY: 2.8, TAXI: 12, SCOOTER: 4, FERRY: 5,
+};
+
+function StepEditor({
+  step,
+  stepIndex,
+  totalSteps,
+  onUpdate,
+  onRemove,
+  onInsertAfter,
+}: {
+  step: TransitStep;
+  stepIndex: number;
+  totalSteps: number;
+  onUpdate: (idx: number, updated: TransitStep) => void;
+  onRemove: (idx: number) => void;
+  onInsertAfter: (idx: number) => void;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [editMode, setEditMode] = useState(step.mode);
+  const [editDuration, setEditDuration] = useState(String(step.durationMins));
+  const [editCost, setEditCost] = useState(String(step.mode === "WALK" ? 0 : (STEP_MODE_COSTS[step.mode] ?? 0)));
+  const [editInstruction, setEditInstruction] = useState(step.instruction);
+  const icon = modeIcons[step.mode] ?? <Navigation size={12} />;
+  const color = stepModeColors[step.mode] ?? "text-foreground";
+  const isWalk = step.mode === "WALK";
+
+  function saveStep() {
+    const dur = parseInt(editDuration);
+    const cost = parseFloat(editCost);
+    onUpdate(stepIndex, {
+      ...step,
+      mode: editMode,
+      durationMins: isNaN(dur) ? step.durationMins : dur,
+      instruction: editInstruction || step.instruction,
+    });
+    setEditing(false);
+  }
+
+  return (
+    <div className="group">
+      <div className="flex items-start gap-2 py-1.5">
+        <div className={cn("mt-0.5 shrink-0", color)}>{icon}</div>
+        <div className="flex-1 min-w-0">
+          {editing ? (
+            <div className="bg-background border border-primary/30 rounded-lg p-2 space-y-2 animate-in fade-in duration-150">
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="text-[10px] text-muted-foreground">Mode</label>
+                  <select
+                    value={editMode}
+                    onChange={e => { setEditMode(e.target.value); setEditCost(String(STEP_MODE_COSTS[e.target.value] ?? 0)); }}
+                    className="w-full mt-0.5 text-xs bg-background border border-border rounded-md px-2 py-1 text-foreground"
+                  >
+                    {STEP_MODES.map(m => <option key={m} value={m}>{m.charAt(0) + m.slice(1).toLowerCase()}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="text-[10px] text-muted-foreground">Duration (min)</label>
+                  <Input type="number" min="0" value={editDuration} onChange={e => setEditDuration(e.target.value)} className="mt-0.5 h-7 text-xs font-mono" />
+                </div>
+              </div>
+              <div>
+                <label className="text-[10px] text-muted-foreground">Description</label>
+                <Input value={editInstruction} onChange={e => setEditInstruction(e.target.value)} className="mt-0.5 h-7 text-xs" />
+              </div>
+              <div className="flex gap-1.5">
+                <Button size="sm" className="flex-1 h-6 text-[10px]" onClick={saveStep}>Save step</Button>
+                <Button size="sm" variant="outline" className="h-6 text-[10px] px-2" onClick={() => setEditing(false)}>Cancel</Button>
+                {totalSteps > 1 && (
+                  <Button size="sm" variant="outline" className="h-6 text-[10px] px-2 text-destructive hover:text-destructive" onClick={() => onRemove(stepIndex)}>
+                    <Trash2 size={10} />
+                  </Button>
+                )}
+              </div>
+            </div>
+          ) : (
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex-1 min-w-0">
+                <span className={cn("text-xs font-medium", color)}>
+                  {isWalk ? `Walk ${step.durationMins} min` : step.instruction}
+                </span>
+                {!isWalk && (
+                  <div className="text-[10px] text-muted-foreground mt-0.5 space-y-0.5">
+                    {step.departureStop && step.arrivalStop && (
+                      <p>{step.departureStop} → {step.arrivalStop}</p>
+                    )}
+                    {(step.lineShortName || step.lineName) && (
+                      <p className="font-medium">{step.lineShortName ?? step.lineName}{step.operator && ` · ${step.operator}`}</p>
+                    )}
+                    {step.departureTime && step.arrivalTime && (
+                      <p className="font-mono">{step.departureTime} → {step.arrivalTime}</p>
+                    )}
+                  </div>
+                )}
+              </div>
+              <div className="flex items-center gap-1.5 shrink-0">
+                <span className="text-[10px] text-muted-foreground font-mono">{step.durationMins}m</span>
+                <button
+                  onClick={() => { setEditMode(step.mode); setEditDuration(String(step.durationMins)); setEditInstruction(step.instruction); setEditing(true); }}
+                  className="opacity-0 group-hover:opacity-100 text-[10px] text-muted-foreground hover:text-foreground transition-all px-1.5 py-0.5 rounded hover:bg-secondary"
+                >
+                  <Settings size={10} />
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+      {/* Insert step button — appears between steps */}
+      <button
+        onClick={() => onInsertAfter(stepIndex)}
+        className="w-full flex items-center justify-center gap-1 text-[9px] text-muted-foreground/50 hover:text-primary hover:bg-primary/5 rounded py-0.5 transition-all opacity-0 group-hover:opacity-100"
+      >
+        <Plus size={9} /> insert step
+      </button>
+    </div>
+  );
+}
+
+// Expandable transport leg card with full multimodal step editor
 function TransportLegCard({
   leg,
   legIndex,
@@ -200,6 +338,7 @@ function TransportLegCard({
   onSelectOption,
   onEditLeg,
   onDeleteLeg,
+  onEditSteps,
 }: {
   leg: TransportLeg;
   legIndex: number;
@@ -207,29 +346,44 @@ function TransportLegCard({
   onSelectOption: (legIndex: number, optionIndex: number) => void;
   onEditLeg?: (legIndex: number, cost: number, mode: string, durationMins: number) => void;
   onDeleteLeg?: (legIndex: number) => void;
+  onEditSteps?: (legIndex: number, steps: TransitStep[]) => void;
 }) {
   const [expanded, setExpanded] = useState(false);
-  const [editing, setEditing] = useState(false);
-  const [editCost, setEditCost] = useState("");
-  const [editMode, setEditMode] = useState("");
-  const [editDuration, setEditDuration] = useState("");
+  const [showOptions, setShowOptions] = useState(false);
   const selectedOpt = leg.options[leg.selectedOptionIndex] ?? leg.options[0];
+  const steps: TransitStep[] = selectedOpt?.steps ?? [];
 
-  function startEdit() {
-    setEditCost(fmt(selectedOpt?.cost ?? 0));
-    setEditMode(selectedOpt?.mode ?? "Train");
-    setEditDuration(String(Math.round(selectedOpt?.durationMins ?? 30)));
-    setEditing(true);
+  // Per-step editing handlers
+  function handleUpdateStep(stepIdx: number, updated: TransitStep) {
+    const newSteps = steps.map((s, i) => i === stepIdx ? updated : s);
+    onEditSteps?.(legIndex, newSteps);
   }
 
-  function saveEdit() {
-    const cost = parseFloat(editCost);
-    const dur = parseInt(editDuration);
-    if (!isNaN(cost) && !isNaN(dur) && onEditLeg) {
-      onEditLeg(legIndex, cost, editMode, dur);
-    }
-    setEditing(false);
+  function handleRemoveStep(stepIdx: number) {
+    if (steps.length <= 1) return;
+    const newSteps = steps.filter((_, i) => i !== stepIdx);
+    onEditSteps?.(legIndex, newSteps);
   }
+
+  function handleInsertAfter(stepIdx: number) {
+    const prev = steps[stepIdx];
+    const newStep: TransitStep = {
+      mode: "WALK",
+      instruction: "Walk to next stop",
+      durationMins: 5,
+      distanceMetres: 400,
+    };
+    const newSteps = [
+      ...steps.slice(0, stepIdx + 1),
+      newStep,
+      ...steps.slice(stepIdx + 1),
+    ];
+    onEditSteps?.(legIndex, newSteps);
+  }
+
+  // Compute summary from steps
+  const totalDurationMins = steps.reduce((s, st) => s + st.durationMins, 0) || selectedOpt?.durationMins || 0;
+  const displayCost = selectedOpt?.cost ?? 0;
 
   return (
     <div className="flex items-start gap-3 py-1.5">
@@ -241,17 +395,13 @@ function TransportLegCard({
         <div className="w-0.5 h-3 bg-border" />
       </div>
       <div className="flex-1 min-w-0">
-        <button
-          onClick={() => setExpanded(e => !e)}
-          className="w-full text-left"
-        >
+        {/* Collapsed header */}
+        <button onClick={() => setExpanded(e => !e)} className="w-full text-left">
           <div className="bg-secondary/70 border border-border/50 rounded-xl p-3">
             <div className="flex items-center justify-between mb-1.5">
               <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">{label}</span>
               <div className="flex items-center gap-1.5">
-                {selectedOpt && (
-                  <span className="text-xs font-bold text-foreground font-mono">£{fmt(selectedOpt.cost)}</span>
-                )}
+                <span className="text-xs font-bold text-foreground font-mono">£{fmt(displayCost)}</span>
                 {expanded ? <ChevronUp size={14} className="text-muted-foreground" /> : <ChevronDown size={14} className="text-muted-foreground" />}
               </div>
             </div>
@@ -262,28 +412,39 @@ function TransportLegCard({
               <span className="font-mono">{leg.toPostcode}</span>
             </div>
             {selectedOpt && (
-              <div className="flex items-center gap-3 mt-1.5">
-                <span className={cn("flex items-center gap-1 text-xs font-semibold", modeColors[selectedOpt.mode] ?? "text-foreground")}>
-                  {modeIcons[selectedOpt.mode]}
-                  {selectedOpt.mode.charAt(0).toUpperCase() + selectedOpt.mode.slice(1)}
-                  {selectedOpt.operator && <span className="text-muted-foreground font-normal">· {selectedOpt.operator}</span>}
-                </span>
-                <span className="text-xs text-muted-foreground">{Math.round(selectedOpt.durationMins)} min</span>
+              <div className="flex items-center gap-3 mt-1.5 flex-wrap">
+                {/* Step-mode chips */}
+                {steps.length > 0 ? (
+                  <div className="flex items-center gap-1">
+                    {steps.filter(s => s.durationMins > 0).map((s, si) => (
+                      <span key={si} className={cn("flex items-center gap-0.5 text-[10px] font-semibold", stepModeColors[s.mode] ?? "text-foreground")}>
+                        {si > 0 && <ArrowRight size={8} className="text-muted-foreground" />}
+                        {modeIcons[s.mode]}
+                      </span>
+                    ))}
+                  </div>
+                ) : (
+                  <span className={cn("flex items-center gap-1 text-xs font-semibold", modeColors[selectedOpt.mode] ?? "text-foreground")}>
+                    {modeIcons[selectedOpt.mode]}
+                    {selectedOpt.mode}
+                  </span>
+                )}
+                <span className="text-xs text-muted-foreground">{Math.round(totalDurationMins)} min</span>
                 {selectedOpt.departureTime && selectedOpt.departureTime !== "On demand" && (
-                  <span className="text-xs text-muted-foreground">{selectedOpt.departureTime} → {selectedOpt.arrivalTime}</span>
+                  <span className="text-xs text-muted-foreground font-mono">{selectedOpt.departureTime} → {selectedOpt.arrivalTime}</span>
                 )}
               </div>
             )}
           </div>
         </button>
 
-        {/* Edit/Delete action row */}
-        <div className="flex gap-1.5 mt-1">
+        {/* Action row */}
+        <div className="flex gap-1.5 mt-1 flex-wrap">
           <button
-            onClick={startEdit}
+            onClick={() => setShowOptions(o => !o)}
             className="flex items-center gap-1 text-[10px] text-muted-foreground hover:text-foreground transition-colors px-2 py-1 rounded-md hover:bg-secondary"
           >
-            <Settings size={10} /> Edit price & mode
+            <Settings size={10} /> Change option
           </button>
           {onDeleteLeg && (
             <button
@@ -295,106 +456,82 @@ function TransportLegCard({
           )}
         </div>
 
-        {/* Inline edit form */}
-        {editing && (
-          <div className="mt-1.5 bg-secondary/60 border border-primary/30 rounded-xl p-3 space-y-2 animate-in fade-in duration-150">
-            <p className="text-xs font-semibold text-primary mb-2">Edit this leg</p>
-            <div className="grid grid-cols-3 gap-2">
-              <div>
-                <label className="text-[10px] text-muted-foreground">Mode</label>
-                <select
-                  value={editMode}
-                  onChange={e => setEditMode(e.target.value)}
-                  className="w-full mt-0.5 text-xs bg-background border border-border rounded-md px-2 py-1.5 text-foreground"
-                >
-                  {["Train", "Bus", "Taxi", "Walk", "Scooter", "Tube", "Tram", "Ferry"].map(m => (
-                    <option key={m} value={m}>{m}</option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <label className="text-[10px] text-muted-foreground">Cost (£)</label>
-                <Input
-                  type="number"
-                  step="0.10"
-                  min="0"
-                  value={editCost}
-                  onChange={e => setEditCost(e.target.value)}
-                  className="mt-0.5 h-8 text-xs font-mono"
-                />
-              </div>
-              <div>
-                <label className="text-[10px] text-muted-foreground">Duration (min)</label>
-                <Input
-                  type="number"
-                  min="1"
-                  value={editDuration}
-                  onChange={e => setEditDuration(e.target.value)}
-                  className="mt-0.5 h-8 text-xs font-mono"
-                />
-              </div>
-            </div>
-            <div className="flex gap-2">
-              <Button size="sm" className="flex-1 h-7 text-xs" onClick={saveEdit}>Save</Button>
-              <Button size="sm" variant="outline" className="flex-1 h-7 text-xs" onClick={() => setEditing(false)}>Cancel</Button>
-            </div>
-          </div>
-        )}
-
-        {expanded && (
-          <div className="mt-1.5 bg-secondary/40 border border-border/40 rounded-xl p-3 space-y-2 animate-in fade-in slide-in-from-top-2 duration-200">
+        {/* Option picker */}
+        {showOptions && (
+          <div className="mt-1.5 bg-secondary/40 border border-border/40 rounded-xl p-3 space-y-2 animate-in fade-in duration-200">
             <p className="text-xs text-muted-foreground font-semibold mb-2">Choose transport option:</p>
             {leg.options.map((opt, oi) => {
               const isSelected = oi === leg.selectedOptionIndex;
               return (
-                <div key={oi} className={cn(
-                  "rounded-lg border transition-all",
-                  isSelected ? "border-primary/60 bg-primary/10" : "border-border/50 bg-secondary/50"
-                )}>
-                  <button
-                    onClick={() => { onSelectOption(legIndex, oi); }}
-                    className="w-full text-left p-2.5"
-                  >
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        {isSelected && <Check size={12} className="text-primary" />}
-                        <span className={cn("flex items-center gap-1 text-xs font-semibold", modeColors[opt.mode] ?? "text-foreground")}>
-                          {modeIcons[opt.mode] ?? modeIcons[opt.mode?.toLowerCase()] ?? <Navigation size={13} />}
-                          {opt.summary ?? opt.mode}
-                        </span>
-                        {opt.operator && <span className="text-xs text-muted-foreground">{opt.operator}</span>}
-                        {opt.changes != null && opt.changes > 0 && (
-                          <span className="text-xs text-muted-foreground">{opt.changes} change{opt.changes > 1 ? "s" : ""}</span>
-                        )}
-                      </div>
-                      <div className="flex items-center gap-2 text-xs">
-                        <span className="text-muted-foreground">{Math.round(opt.durationMins)} min</span>
-                        <span className="font-bold font-mono text-foreground">£{fmt(opt.cost)}</span>
-                      </div>
+                <button
+                  key={oi}
+                  onClick={() => { onSelectOption(legIndex, oi); setShowOptions(false); }}
+                  className={cn(
+                    "w-full text-left p-2.5 rounded-lg border transition-all",
+                    isSelected ? "border-primary/60 bg-primary/10" : "border-border/50 bg-secondary/50"
+                  )}
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      {isSelected && <Check size={12} className="text-primary" />}
+                      <span className={cn("flex items-center gap-1 text-xs font-semibold", modeColors[opt.mode] ?? "text-foreground")}>
+                        {modeIcons[opt.mode] ?? <Navigation size={13} />}
+                        {opt.summary ?? opt.mode}
+                      </span>
+                      {opt.operator && <span className="text-xs text-muted-foreground">{opt.operator}</span>}
                     </div>
-                    {opt.departureTime && opt.departureTime !== "On demand" && (
-                      <div className="text-xs text-muted-foreground mt-1 ml-5 font-mono">
-                        Departs {opt.departureTime} · Arrives {opt.arrivalTime}
-                      </div>
-                    )}
-                  </button>
-                  {/* Step-by-step breakdown */}
-                  {isSelected && opt.steps && opt.steps.length > 0 && (
-                    <div className="px-3 pb-2.5 border-t border-border/30 mt-0.5 divide-y divide-border/20">
-                      {opt.steps.map((step, si) => (
-                        <StepDetail key={si} step={step} />
-                      ))}
+                    <div className="flex items-center gap-2 text-xs">
+                      <span className="text-muted-foreground">{Math.round(opt.durationMins)} min</span>
+                      <span className="font-bold font-mono">£{fmt(opt.cost)}</span>
+                    </div>
+                  </div>
+                  {opt.departureTime && opt.departureTime !== "On demand" && (
+                    <div className="text-xs text-muted-foreground mt-1 ml-5 font-mono">
+                      Departs {opt.departureTime} · Arrives {opt.arrivalTime}
                     </div>
                   )}
-                </div>
+                </button>
               );
             })}
             {leg.noTransitZone && (
               <div className="flex items-center gap-1.5 text-xs text-yellow-400 bg-yellow-400/10 rounded-lg px-2 py-1.5">
-                <AlertTriangle size={11} />
-                Rural area — limited public transport
+                <AlertTriangle size={11} /> Rural area — limited public transport
               </div>
             )}
+          </div>
+        )}
+
+        {/* Multimodal step-by-step editor */}
+        {expanded && (
+          <div className="mt-1.5 bg-secondary/40 border border-border/40 rounded-xl p-3 animate-in fade-in slide-in-from-top-2 duration-200">
+            <div className="flex items-center justify-between mb-2">
+              <p className="text-xs text-muted-foreground font-semibold">Journey steps</p>
+              <span className="text-[10px] text-muted-foreground">{steps.length} step{steps.length !== 1 ? "s" : ""} · {Math.round(totalDurationMins)} min · £{fmt(displayCost)}</span>
+            </div>
+            {steps.length === 0 ? (
+              <p className="text-xs text-muted-foreground text-center py-2">No step detail available</p>
+            ) : (
+              <div className="divide-y divide-border/20">
+                {steps.map((step, si) => (
+                  <StepEditor
+                    key={si}
+                    step={step}
+                    stepIndex={si}
+                    totalSteps={steps.length}
+                    onUpdate={handleUpdateStep}
+                    onRemove={handleRemoveStep}
+                    onInsertAfter={handleInsertAfter}
+                  />
+                ))}
+              </div>
+            )}
+            {/* Add step at end */}
+            <button
+              onClick={() => handleInsertAfter(steps.length - 1)}
+              className="w-full mt-2 flex items-center justify-center gap-1.5 text-xs text-muted-foreground hover:text-primary border border-dashed border-border rounded-lg py-1.5 transition-colors hover:border-primary/40"
+            >
+              <Plus size={11} /> Add step
+            </button>
           </div>
         )}
       </div>
@@ -689,6 +826,40 @@ export default function ChainPlanner() {
     // Re-index legSelections
     setLegSelections(prev => prev.filter(s => s.legIndex !== legIndex).map(s => s.legIndex > legIndex ? { ...s, legIndex: s.legIndex - 1 } : s));
     toast.success("Leg removed");
+  };
+
+  // Edit individual steps within a transport leg
+  const handleEditSteps = (legIndex: number, newSteps: TransitStep[]) => {
+    setChainResult(prev => {
+      if (!prev) return prev;
+      const updatedLegs = prev.transportLegs.map((leg, i) => {
+        if (i !== legIndex) return leg;
+        // Update the selected option's steps and recalculate its duration
+        const newDurationMins = newSteps.reduce((s, st) => s + (st.durationMins ?? 0), 0);
+        const updatedOptions = leg.options.map((opt, oi) =>
+          oi === leg.selectedOptionIndex
+            ? { ...opt, steps: newSteps, durationMins: newDurationMins > 0 ? newDurationMins : opt.durationMins }
+            : opt
+        );
+        return { ...leg, options: updatedOptions };
+      });
+      // Recalculate totals
+      let totalTransportCost = 0;
+      let totalTransportMins = 0;
+      for (const leg of updatedLegs) {
+        const opt = leg.options[leg.selectedOptionIndex] ?? leg.options[0];
+        if (opt) { totalTransportCost += opt.cost; totalTransportMins += opt.durationMins; }
+      }
+      const totalBrokerFees = Number(prev.summary.totalBrokerFees);
+      const totalEarnings = Number(prev.summary.totalEarnings);
+      const totalCosts = totalBrokerFees + totalTransportCost;
+      const totalNetProfit = totalEarnings - totalCosts;
+      const baseDriveMins = Number(prev.summary.totalDurationMins) -
+        prev.transportLegs.reduce((s, leg) => { const opt = leg.options[leg.selectedOptionIndex] ?? leg.options[0]; return s + (opt?.durationMins ?? 0); }, 0);
+      const totalDurationMins = baseDriveMins + totalTransportMins;
+      const profitPerHour = totalDurationMins > 0 ? (totalNetProfit / totalDurationMins) * 60 : 0;
+      return { ...prev, transportLegs: updatedLegs, summary: { ...prev.summary, totalTransportCost, totalCosts, totalNetProfit, totalDurationMins, profitPerHour } };
+    });
   };
 
   // Add a custom leg
@@ -1030,6 +1201,7 @@ export default function ChainPlanner() {
                           onSelectOption={handleSelectOption}
                           onEditLeg={handleEditLeg}
                           onDeleteLeg={handleDeleteLeg}
+                          onEditSteps={handleEditSteps}
                         />
                       );
                     }

@@ -299,3 +299,27 @@
 - [x] UI: Plan Day sheet shows jobs for selected date with time + earnings, tap to select
 - [x] UI: "Plan Chain" button navigates to Chain Planner with selected job IDs pre-filled
 - [x] UI: Chain Planner reads ?chainJobs= URL param and pre-selects those jobs on load
+
+## Feature: Fully Multimodal Leg Editor
+- [ ] Server: each transport leg returns step-level detail (walk, bus, train, taxi each as own step with from/to, duration, cost, departure, arrival)
+- [ ] Server: Google Maps transit steps already contain this data — expose it fully per step
+- [ ] UI: each transport leg expands to show individual steps as a vertical timeline
+- [ ] UI: each step shows mode icon, from/to location, departure/arrival time, duration, cost
+- [ ] UI: "Add step" button between any two steps to insert a new leg segment
+- [ ] UI: "Remove step" button on each step to delete it from the leg
+- [ ] UI: "Swap mode" on each step (walk/bus/train/taxi/scooter) with cost auto-updating
+- [ ] UI: edit cost and duration per step inline
+- [ ] UI: all timings cascade automatically when any step is changed
+- [ ] UI: leg total cost = sum of step costs (auto-calculated)
+- [ ] UI: leg total duration = sum of step durations (auto-calculated)
+
+## Feature: Multimodal Step-Level Editing in Chain Planner
+- [x] UI: Each transport leg shows step-by-step breakdown (Walk → Bus → Train) in expandable panel
+- [x] UI: Each step is individually editable — tap gear icon to edit mode, duration, and description
+- [x] UI: "Insert step" button between each pair of steps to add new Walk/Bus/Train/Taxi/Scooter/Ferry steps
+- [x] UI: "Remove step" button on each step (disabled when only 1 step remains)
+- [x] UI: Leg total duration auto-recalculates from sum of all step durations when steps change
+- [x] UI: Chain summary (totalDurationMins, profitPerHour) cascades update when steps change
+- [x] UI: Step mode chips shown in collapsed leg header (Walk → Bus → Train icons)
+- [x] UI: "Change option" button replaces old inline edit to switch between transport options
+- [x] Tests: 9 new vitest unit tests for step insert/remove/update/recalculate logic (37 total)

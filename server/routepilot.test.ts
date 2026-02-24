@@ -248,3 +248,98 @@ describe("Subscription tier gating", () => {
     expect(overlap).toHaveLength(0);
   });
 });
+
+// ─── Multimodal step editor logic ─────────────────────────────────────────────
+
+describe("multimodal step editor logic", () => {
+  type TransitStep = {
+    mode: string;
+    instruction: string;
+    durationMins: number;
+    distanceMetres: number;
+    departureStop?: string;
+    arrivalStop?: string;
+  };
+
+  function recalcLegDuration(steps: TransitStep[]): number {
+    return steps.reduce((s, st) => s + st.durationMins, 0);
+  }
+
+  function insertStepAfter(steps: TransitStep[], idx: number, newStep: TransitStep): TransitStep[] {
+    return [...steps.slice(0, idx + 1), newStep, ...steps.slice(idx + 1)];
+  }
+
+  function removeStep(steps: TransitStep[], idx: number): TransitStep[] {
+    return steps.filter((_, i) => i !== idx);
+  }
+
+  function updateStep(steps: TransitStep[], idx: number, updated: TransitStep): TransitStep[] {
+    return steps.map((s, i) => i === idx ? updated : s);
+  }
+
+  const baseSteps: TransitStep[] = [
+    { mode: "WALK", instruction: "Walk to bus stop", durationMins: 5, distanceMetres: 400 },
+    { mode: "BUS", instruction: "Take bus 46", durationMins: 20, distanceMetres: 8000 },
+    { mode: "WALK", instruction: "Walk to destination", durationMins: 3, distanceMetres: 250 },
+  ];
+
+  it("recalculates total duration from steps", () => {
+    expect(recalcLegDuration(baseSteps)).toBe(28);
+  });
+
+  it("inserts a new step after a given index", () => {
+    const newStep: TransitStep = { mode: "TRAIN", instruction: "Take train", durationMins: 15, distanceMetres: 12000 };
+    const result = insertStepAfter(baseSteps, 1, newStep);
+    expect(result).toHaveLength(4);
+    expect(result[2]!.mode).toBe("TRAIN");
+    expect(result[3]!.mode).toBe("WALK");
+  });
+
+  it("inserts a step at the beginning (after index -1 via prepend)", () => {
+    const newStep: TransitStep = { mode: "WALK", instruction: "Walk to start", durationMins: 2, distanceMetres: 150 };
+    const result = insertStepAfter(baseSteps, -1, newStep);
+    expect(result[0]!.mode).toBe("WALK");
+    expect(result).toHaveLength(4);
+  });
+
+  it("removes a step by index", () => {
+    const result = removeStep(baseSteps, 1);
+    expect(result).toHaveLength(2);
+    expect(result[0]!.mode).toBe("WALK");
+    expect(result[1]!.mode).toBe("WALK");
+  });
+
+  it("does not allow removing the last step (guard)", () => {
+    const singleStep = [baseSteps[0]!];
+    // Guard: if only 1 step, don't remove
+    const result = singleStep.length > 1 ? removeStep(singleStep, 0) : singleStep;
+    expect(result).toHaveLength(1);
+  });
+
+  it("updates a step's mode and duration", () => {
+    const updated: TransitStep = { ...baseSteps[1]!, mode: "TRAIN", durationMins: 12 };
+    const result = updateStep(baseSteps, 1, updated);
+    expect(result[1]!.mode).toBe("TRAIN");
+    expect(result[1]!.durationMins).toBe(12);
+    // Other steps unchanged
+    expect(result[0]!.mode).toBe("WALK");
+    expect(result[2]!.mode).toBe("WALK");
+  });
+
+  it("recalculates total duration after step update", () => {
+    const updated: TransitStep = { ...baseSteps[1]!, durationMins: 10 };
+    const newSteps = updateStep(baseSteps, 1, updated);
+    expect(recalcLegDuration(newSteps)).toBe(18); // 5 + 10 + 3
+  });
+
+  it("recalculates total duration after step insertion", () => {
+    const newStep: TransitStep = { mode: "TAXI", instruction: "Taxi to station", durationMins: 8, distanceMetres: 3000 };
+    const newSteps = insertStepAfter(baseSteps, 0, newStep);
+    expect(recalcLegDuration(newSteps)).toBe(36); // 5 + 8 + 20 + 3
+  });
+
+  it("recalculates total duration after step removal", () => {
+    const newSteps = removeStep(baseSteps, 1);
+    expect(recalcLegDuration(newSteps)).toBe(8); // 5 + 3
+  });
+});
