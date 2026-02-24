@@ -3,7 +3,7 @@ import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
 import { publicProcedure, router } from "./_core/trpc";
 import { jobsRouter } from "./routers/jobs";
-import { chainsRouter } from "./routers/chains";
+import { chainsRouter, chainsPublicRouter } from "./routers/chains";
 import { settingsRouter } from "./routers/settings";
 import { fuelRouter } from "./routers/fuel";
 import { historyRouter } from "./routers/history";
@@ -33,6 +33,7 @@ export const appRouter = router({
   }),
   jobs: jobsRouter,
   chains: chainsRouter,
+  chainsPublic: chainsPublicRouter,
   settings: settingsRouter,
   fuel: fuelRouter,
   history: historyRouter,

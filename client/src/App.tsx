@@ -32,6 +32,7 @@ function Router() {
   const [location] = useLocation();
   const hideNav =
     location.startsWith("/share/") ||
+    location.startsWith("/chain/") ||
     location.startsWith("/shared-route/") ||
     location === "/landing" ||
     location.startsWith("/condition-report/");
@@ -70,6 +71,7 @@ function Router() {
 
         {/* Shared / public routes */}
         <Route path="/share/:token" component={SharedChain} />
+        <Route path="/chain/:token" component={SharedChain} />
         <Route path="/shared-route/:token" component={SharedRoute} />
 
         <Route path="/404" component={NotFound} />

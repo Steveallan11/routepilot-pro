@@ -671,8 +671,7 @@ export const chainsRouter = router({
       const db = await getDb();
       if (!db) throw new Error("Database unavailable");
 
-      const chainId = nanoid(12);
-      await db.insert(jobChains).values({
+      const [insertResult] = await db.insert(jobChains).values({
         userId: ctx.user.id,
         name: input.name ?? `Chain ${new Date().toLocaleDateString("en-GB")}`,
         status: "planned",
@@ -683,7 +682,18 @@ export const chainsRouter = router({
         totalDurationMins: 0,
       });
 
-      return { success: true };
+      const chainDbId = (insertResult as unknown as { insertId: number }).insertId;
+
+      // Link jobs to the chain
+      for (let pos = 0; pos < input.jobIds.length; pos++) {
+        await db.insert(chainJobs).values({
+          chainId: chainDbId,
+          jobId: input.jobIds[pos]!,
+          position: pos + 1,
+        });
+      }
+
+      return { success: true, chainId: chainDbId };
     }),
 
   // Mark a chain and all its jobs as completed
@@ -788,5 +798,112 @@ export const chainsRouter = router({
         totalNetProfit: Number(c.totalNetProfit ?? 0),
         totalDistanceMiles: Number(c.totalDistanceMiles ?? 0),
       }));
+    }),
+
+  // ── Persist edited transport legs for a saved chain ──────────────────────
+  saveEdits: protectedProcedure
+    .input(z.object({
+      chainId: z.number(),
+      transportLegs: z.any(), // full JSON of TransportLeg[]
+      summary: z.object({
+        totalEarnings: z.number(),
+        totalTransportCost: z.number(),
+        totalCosts: z.number(),
+        totalNetProfit: z.number(),
+        totalDurationMins: z.number(),
+        totalDistanceMiles: z.number().optional(),
+        profitPerHour: z.number(),
+      }),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const db = await getDb();
+      if (!db) throw new Error("Database unavailable");
+      // Verify ownership
+      const chain = await db.select().from(jobChains)
+        .where(and(eq(jobChains.id, input.chainId), eq(jobChains.userId, ctx.user.id)))
+        .limit(1);
+      if (!chain[0]) throw new Error("Chain not found");
+      await db.update(jobChains)
+        .set({
+          repositionLegs: input.transportLegs,
+          totalEarnings: input.summary.totalEarnings as unknown as number,
+          totalCosts: input.summary.totalCosts as unknown as number,
+          totalNetProfit: input.summary.totalNetProfit as unknown as number,
+          totalDurationMins: input.summary.totalDurationMins as unknown as number,
+          totalDistanceMiles: (input.summary.totalDistanceMiles ?? 0) as unknown as number,
+          profitPerHour: input.summary.profitPerHour as unknown as number,
+        })
+        .where(eq(jobChains.id, input.chainId));
+      return { success: true };
+    }),
+
+  // ── Generate a shareable read-only link for a chain ──────────────────────
+  createShareLink: protectedProcedure
+    .input(z.object({ chainId: z.number() }))
+    .mutation(async ({ ctx, input }) => {
+      const db = await getDb();
+      if (!db) throw new Error("Database unavailable");
+      const chain = await db.select().from(jobChains)
+        .where(and(eq(jobChains.id, input.chainId), eq(jobChains.userId, ctx.user.id)))
+        .limit(1);
+      if (!chain[0]) throw new Error("Chain not found");
+      const token = nanoid(20);
+      const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days
+      await db.update(jobChains)
+        .set({ shareToken: token, shareExpiresAt: expiresAt })
+        .where(eq(jobChains.id, input.chainId));
+      return { token, expiresAt };
+    }),
+
+});
+
+// ── Public read-only chain view (no auth required) ────────────────────────
+import { publicProcedure } from "../_core/trpc";
+
+export const chainsPublicRouter = router({
+  getShared: publicProcedure
+    .input(z.object({ token: z.string() }))
+    .query(async ({ input }) => {
+      const db = await getDb();
+      if (!db) throw new Error("Database unavailable");
+      const chain = await db.select().from(jobChains)
+        .where(eq(jobChains.shareToken, input.token))
+        .limit(1);
+      if (!chain[0]) throw new Error("Chain not found or link expired");
+      if (chain[0].shareExpiresAt && new Date(chain[0].shareExpiresAt) < new Date()) {
+        throw new Error("Share link has expired");
+      }
+      // Fetch job details
+      const cjRows = await db.select().from(chainJobs)
+        .where(eq(chainJobs.chainId, chain[0].id))
+        .orderBy(chainJobs.position);
+      const jobIds = cjRows.map(r => r.jobId);
+      const jobRows = jobIds.length > 0
+        ? await db.select().from(jobs).where(inArray(jobs.id, jobIds))
+        : [];
+      return {
+        chain: {
+          ...chain[0],
+          totalEarnings: Number(chain[0].totalEarnings ?? 0),
+          totalCosts: Number(chain[0].totalCosts ?? 0),
+          totalNetProfit: Number(chain[0].totalNetProfit ?? 0),
+          totalDistanceMiles: Number(chain[0].totalDistanceMiles ?? 0),
+          profitPerHour: Number(chain[0].profitPerHour ?? 0),
+          transportLegs: chain[0].repositionLegs ?? [],
+        },
+        jobs: jobRows.map(j => ({
+          id: j.id,
+          pickupPostcode: j.pickupPostcode,
+          dropoffPostcode: j.dropoffPostcode,
+          deliveryFee: Number(j.deliveryFee),
+          estimatedDistanceMiles: Number(j.estimatedDistanceMiles ?? 0),
+          estimatedDurationMins: Number(j.estimatedDurationMins ?? 0),
+          vehicleMake: j.vehicleMake,
+          vehicleModel: j.vehicleModel,
+          vehicleReg: j.vehicleReg,
+          brokerName: j.brokerName,
+          scheduledPickupAt: j.scheduledPickupAt,
+        })),
+      };
     }),
 });

@@ -328,3 +328,23 @@
 - [x] Make entire step row tappable to open edit form (remove hover-only gear icon)
 - [x] Newly inserted steps open in edit mode immediately
 - [x] Edit form always accessible on touch devices (no hover dependency)
+
+## Feature: Per-Step Cost Editing
+- [x] Add cost field to TransitStep type
+- [x] StepEditor: add cost input field alongside mode/duration
+- [x] Leg total cost = sum of step costs when steps have costs defined
+- [x] Chain summary recalculates totalTransportCost when step costs change
+
+## Feature: Persist Chain Edits to Database
+- [x] DB schema: repositionLegs JSON column already exists — used for storage
+- [x] Server: chains.saveEdits procedure — stores full modified transportLegs JSON + summary
+- [x] Server: chains.save now returns chainId for downstream use
+- [x] UI: "Save Edits" button in chain result — persists current step/leg edits
+- [x] UI: Save Edits disabled until chain is first saved
+
+## Feature: Shareable Chain Plan Link
+- [x] DB schema: shareToken + shareExpiresAt already exist on job_chains
+- [x] Server: chains.createShareLink — generates token, returns public URL (7-day expiry)
+- [x] Server: chainsPublicRouter.getShared — public procedure, returns chain by token (no auth)
+- [x] UI: "Share Plan" button in chain result — generates link and copies to clipboard
+- [x] UI: /chain/:token public read-only page showing full journey timeline with step detail

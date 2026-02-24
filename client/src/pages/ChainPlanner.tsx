@@ -136,6 +136,7 @@ type TransitStep = {
   instruction: string;
   durationMins: number;
   distanceMetres: number;
+  cost?: number;           // per-step fare cost (£)
   departureStop?: string;
   arrivalStop?: string;
   lineName?: string;
@@ -233,16 +234,19 @@ function StepEditor({
   const [editing, setEditing] = useState(initiallyEditing);
   const [editMode, setEditMode] = useState(step.mode);
   const [editDuration, setEditDuration] = useState(String(step.durationMins));
+  const [editCost, setEditCost] = useState(String(step.cost ?? STEP_MODE_COSTS[step.mode] ?? 0));
   const [editInstruction, setEditInstruction] = useState(step.instruction);
   const icon = modeIcons[step.mode] ?? <Navigation size={12} />;
   const color = stepModeColors[step.mode] ?? "text-foreground";
   const isWalk = step.mode === "WALK";
+  const displayCost = step.cost ?? STEP_MODE_COSTS[step.mode] ?? 0;
 
   // Sync local state when step prop changes (e.g. after save)
   useEffect(() => {
     if (!editing) {
       setEditMode(step.mode);
       setEditDuration(String(step.durationMins));
+      setEditCost(String(step.cost ?? STEP_MODE_COSTS[step.mode] ?? 0));
       setEditInstruction(step.instruction);
     }
   }, [step, editing]);
@@ -250,16 +254,19 @@ function StepEditor({
   function openEdit() {
     setEditMode(step.mode);
     setEditDuration(String(step.durationMins));
+    setEditCost(String(step.cost ?? STEP_MODE_COSTS[step.mode] ?? 0));
     setEditInstruction(step.instruction);
     setEditing(true);
   }
 
   function saveStep() {
     const dur = parseInt(editDuration);
+    const cost = parseFloat(editCost);
     onUpdate(stepIndex, {
       ...step,
       mode: editMode,
       durationMins: isNaN(dur) ? step.durationMins : dur,
+      cost: isNaN(cost) ? (step.cost ?? STEP_MODE_COSTS[editMode] ?? 0) : cost,
       instruction: editInstruction || step.instruction,
     });
     setEditing(false);
@@ -272,12 +279,12 @@ function StepEditor({
         <div className="flex-1 min-w-0">
           {editing ? (
             <div className="bg-background border border-primary/30 rounded-lg p-2 space-y-2 animate-in fade-in duration-150">
-              <div className="grid grid-cols-2 gap-2">
+              <div className="grid grid-cols-3 gap-2">
                 <div>
                   <label className="text-[10px] text-muted-foreground">Mode</label>
                   <select
                     value={editMode}
-                    onChange={e => setEditMode(e.target.value)}
+                    onChange={e => { setEditMode(e.target.value); setEditCost(String(STEP_MODE_COSTS[e.target.value] ?? 0)); }}
                     className="w-full mt-0.5 text-xs bg-background border border-border rounded-md px-2 py-1.5 text-foreground"
                   >
                     {STEP_MODES.map(m => <option key={m} value={m}>{m.charAt(0) + m.slice(1).toLowerCase()}</option>)}
@@ -286,6 +293,10 @@ function StepEditor({
                 <div>
                   <label className="text-[10px] text-muted-foreground">Duration (min)</label>
                   <Input type="number" min="0" value={editDuration} onChange={e => setEditDuration(e.target.value)} className="mt-0.5 h-8 text-xs font-mono" />
+                </div>
+                <div>
+                  <label className="text-[10px] text-muted-foreground">Cost (£)</label>
+                  <Input type="number" min="0" step="0.10" value={editCost} onChange={e => setEditCost(e.target.value)} className="mt-0.5 h-8 text-xs font-mono" />
                 </div>
               </div>
               <div>
@@ -327,6 +338,9 @@ function StepEditor({
                 )}
               </div>
               <div className="flex items-center gap-1.5 shrink-0">
+                {displayCost > 0 && (
+                  <span className="text-[10px] font-mono font-semibold text-primary/80">£{fmt(displayCost)}</span>
+                )}
                 <span className="text-[10px] text-muted-foreground font-mono">{step.durationMins}m</span>
                 {/* Always-visible edit indicator — no hover needed on mobile */}
                 <span className="text-muted-foreground/60">
@@ -699,8 +713,13 @@ export default function ChainPlanner() {
     { enabled: isAuthenticated }
   );
 
+  const [savedChainId, setSavedChainId] = useState<number | null>(null);
+  const [shareLink, setShareLink] = useState<string | null>(null);
+
   const planMutation = trpc.chains.plan.useMutation();
   const saveChainMutation = trpc.chains.save.useMutation();
+  const saveEditsMutation = trpc.chains.saveEdits.useMutation();
+  const createShareLinkMutation = trpc.chains.createShareLink.useMutation();
   const saveSettingsMutation = trpc.settings.upsert.useMutation();
   const createJobMutation = trpc.jobs.create.useMutation();
 
@@ -859,11 +878,21 @@ export default function ChainPlanner() {
       if (!prev) return prev;
       const updatedLegs = prev.transportLegs.map((leg, i) => {
         if (i !== legIndex) return leg;
-        // Update the selected option's steps and recalculate its duration
+        // Recalculate duration and cost from steps
         const newDurationMins = newSteps.reduce((s, st) => s + (st.durationMins ?? 0), 0);
+        // If any step has an explicit cost, sum them; otherwise keep original opt cost
+        const stepsHaveCost = newSteps.some(st => st.cost !== undefined);
+        const newCostFromSteps = stepsHaveCost
+          ? newSteps.reduce((s, st) => s + (st.cost ?? STEP_MODE_COSTS[st.mode] ?? 0), 0)
+          : null;
         const updatedOptions = leg.options.map((opt, oi) =>
           oi === leg.selectedOptionIndex
-            ? { ...opt, steps: newSteps, durationMins: newDurationMins > 0 ? newDurationMins : opt.durationMins }
+            ? {
+                ...opt,
+                steps: newSteps,
+                durationMins: newDurationMins > 0 ? newDurationMins : opt.durationMins,
+                cost: newCostFromSteps !== null ? newCostFromSteps : opt.cost,
+              }
             : opt
         );
         return { ...leg, options: updatedOptions };
@@ -977,12 +1006,54 @@ export default function ChainPlanner() {
   const handleSaveChain = async () => {
     if (!chainResult) return;
     try {
-      await saveChainMutation.mutateAsync({
+      const result = await saveChainMutation.mutateAsync({
         jobIds: selectedJobIds,
-      });
+      }) as { chainId?: number };
+      if (result?.chainId) setSavedChainId(result.chainId);
       toast.success("Chain saved!");
     } catch {
       toast.error("Failed to save chain");
+    }
+  };
+
+  const handleSaveEdits = async () => {
+    if (!chainResult || !savedChainId) {
+      toast.error("Save the chain first before saving edits");
+      return;
+    }
+    try {
+      await saveEditsMutation.mutateAsync({
+        chainId: savedChainId,
+        transportLegs: chainResult.transportLegs,
+        summary: {
+          totalEarnings: Number(chainResult.summary.totalEarnings),
+          totalTransportCost: Number(chainResult.summary.totalTransportCost),
+          totalCosts: Number(chainResult.summary.totalCosts),
+          totalNetProfit: Number(chainResult.summary.totalNetProfit),
+          totalDurationMins: Number(chainResult.summary.totalDurationMins),
+          totalDistanceMiles: Number(chainResult.summary.totalDistanceMiles ?? 0),
+          profitPerHour: Number(chainResult.summary.profitPerHour),
+        },
+      });
+      toast.success("Edits saved to database!");
+    } catch {
+      toast.error("Failed to save edits");
+    }
+  };
+
+  const handleShareChain = async () => {
+    if (!savedChainId) {
+      toast.error("Save the chain first to generate a share link");
+      return;
+    }
+    try {
+      const result = await createShareLinkMutation.mutateAsync({ chainId: savedChainId });
+      const link = `${window.location.origin}/chain/${result.token}`;
+      setShareLink(link);
+      await navigator.clipboard.writeText(link).catch(() => {});
+      toast.success("Share link copied to clipboard! Valid for 7 days.");
+    } catch {
+      toast.error("Failed to generate share link");
     }
   };
 
@@ -1376,6 +1447,51 @@ export default function ChainPlanner() {
                     {createJobMutation.isPending ? "Adding..." : "Add to Calendar"}
                   </Button>
                 </div>
+
+                {/* Save Edits + Share row — shown once chain is saved */}
+                <div className="flex gap-2">
+                  <Button
+                    variant="outline"
+                    onClick={handleSaveEdits}
+                    disabled={saveEditsMutation.isPending || !savedChainId}
+                    className="flex-1 gap-1.5"
+                    title={!savedChainId ? "Save the chain first" : "Persist step edits to database"}
+                  >
+                    <Save size={14} />
+                    {saveEditsMutation.isPending ? "Saving edits..." : "Save Edits"}
+                  </Button>
+                  <Button
+                    variant="outline"
+                    onClick={handleShareChain}
+                    disabled={createShareLinkMutation.isPending || !savedChainId}
+                    className="flex-1 gap-1.5"
+                    title={!savedChainId ? "Save the chain first" : "Generate a shareable read-only link"}
+                  >
+                    <Link2 size={14} />
+                    {createShareLinkMutation.isPending ? "Generating..." : "Share Plan"}
+                  </Button>
+                </div>
+
+                {/* Share link display */}
+                {shareLink && (
+                  <div className="bg-secondary/60 rounded-xl p-3 space-y-1.5">
+                    <p className="text-xs text-muted-foreground font-medium">Share link (valid 7 days):</p>
+                    <div className="flex items-center gap-2">
+                      <p className="text-xs font-mono text-primary flex-1 truncate">{shareLink}</p>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="h-6 px-2 text-xs shrink-0"
+                        onClick={() => {
+                          navigator.clipboard.writeText(shareLink).catch(() => {});
+                          toast.success("Copied!");
+                        }}
+                      >
+                        Copy
+                      </Button>
+                    </div>
+                  </div>
+                )}
               </CardContent>
             </Card>
           </div>
