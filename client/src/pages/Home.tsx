@@ -1139,26 +1139,16 @@ export default function Home() {
                       )}
                       {res.breakdown.fuelCost > 0 && (
                         <div className="flex justify-between">
-                          <span className="text-muted-foreground">Fuel Cost</span>
-                          <span className="font-mono">-£{res.breakdown.fuelCost.toFixed(2)}</span>
+                          <span className="text-muted-foreground flex items-center gap-1">
+                            Fuel Cost <span className="text-xs text-blue-400">(claimed back)</span>
+                          </span>
+                          <span className="font-mono text-muted-foreground">£{res.breakdown.fuelCost.toFixed(2)}</span>
                         </div>
                       )}
                       {res.breakdown.brokerFee > 0 && (
                         <div className="flex justify-between">
                           <span className="text-muted-foreground">Broker Fee</span>
                           <span className="font-mono">-£{res.breakdown.brokerFee.toFixed(2)}</span>
-                        </div>
-                      )}
-                      {settings.enableTimeValue && res.breakdown.timeValue > 0 && (
-                        <div className="flex justify-between">
-                          <span className="text-muted-foreground">Time Value</span>
-                          <span className="font-mono">-£{res.breakdown.timeValue.toFixed(2)}</span>
-                        </div>
-                      )}
-                      {settings.enableWearTear && res.breakdown.wearTear > 0 && (
-                        <div className="flex justify-between">
-                          <span className="text-muted-foreground">Wear & Tear</span>
-                          <span className="font-mono">-£{res.breakdown.wearTear.toFixed(2)}</span>
                         </div>
                       )}
                       {res.breakdown.travelToJobCost > 0 && (
@@ -1175,12 +1165,6 @@ export default function Home() {
                             <Train size={11} /> Travel Home
                           </span>
                           <span className="font-mono">-£{res.breakdown.travelHomeCost.toFixed(2)}</span>
-                        </div>
-                      )}
-                      {res.breakdown.riskBuffer > 0 && (
-                        <div className="flex justify-between">
-                          <span className="text-muted-foreground">Risk Buffer</span>
-                          <span className="font-mono">-£{res.breakdown.riskBuffer.toFixed(2)}</span>
                         </div>
                       )}
                       <Separator className="my-1.5" />

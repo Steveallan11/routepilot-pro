@@ -153,17 +153,13 @@ export const chainsRouter = router({
       let totalEarnings = 0;
       let totalFuelCost = 0;
       let totalBrokerFees = 0;
-      let totalTimeValue = 0;
-      let totalWearTear = 0;
       let totalDistanceMiles = 0;
       let totalDurationMins = 0;
 
       for (const job of orderedJobs) {
         totalEarnings += job.deliveryFee + job.fuelDeposit;
-        totalFuelCost += job.estimatedFuelCost ?? 0;
+        totalFuelCost += job.estimatedFuelCost ?? 0; // informational only — not deducted
         totalBrokerFees += (job.deliveryFee * (job.brokerFeePercent ?? 0) / 100) + (job.brokerFeeFixed ?? 0);
-        totalTimeValue += job.estimatedTimeValue ?? 0;
-        totalWearTear += job.estimatedWearTear ?? 0;
         totalDistanceMiles += job.estimatedDistanceMiles ?? 0;
         totalDurationMins += job.estimatedDurationMins ?? 0;
       }
@@ -180,7 +176,9 @@ export const chainsRouter = router({
 
       totalDurationMins += totalRepositionMins;
 
-      const totalCosts = totalFuelCost + totalBrokerFees + totalTimeValue + totalWearTear + totalRepositionCost;
+      // Only real out-of-pocket deductions: broker fees + reposition travel costs
+      // Fuel is NOT deducted — drivers claim it back
+      const totalCosts = totalBrokerFees + totalRepositionCost;
       const totalNetProfit = totalEarnings - totalCosts;
       const profitPerHour = totalDurationMins > 0 ? (totalNetProfit / totalDurationMins) * 60 : 0;
 
@@ -201,8 +199,8 @@ export const chainsRouter = router({
           totalRepositionCost,
           totalFuelCost,
           totalBrokerFees,
-          totalTimeValue,
-          totalWearTear,
+          totalTimeValue: 0,
+          totalWearTear: 0,
           totalCosts,
           totalNetProfit,
           totalDurationMins,

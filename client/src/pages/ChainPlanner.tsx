@@ -347,8 +347,8 @@ export default function ChainPlanner() {
                   {[
                     { label: "Total Earnings", value: `£${chainResult.summary.totalEarnings.toFixed(2)}`, positive: true },
                     { label: "Reposition Cost", value: `£${chainResult.summary.totalRepositionCost.toFixed(2)}`, positive: false },
-                    { label: "Fuel Cost", value: `£${chainResult.summary.totalFuelCost.toFixed(2)}`, positive: false },
                     { label: "Total Distance", value: `${chainResult.summary.totalDistanceMiles.toFixed(1)} mi`, positive: null },
+                    { label: "Broker Fees", value: `£${chainResult.summary.totalBrokerFees.toFixed(2)}`, positive: false },
                   ].map(item => (
                     <div key={item.label} className="bg-secondary rounded-lg p-2.5">
                       <p className="text-xs text-muted-foreground mb-0.5">{item.label}</p>
@@ -361,6 +361,12 @@ export default function ChainPlanner() {
                     </div>
                   ))}
                 </div>
+                {chainResult.summary.totalFuelCost > 0 && (
+                  <div className="flex justify-between text-xs text-muted-foreground mb-3 px-0.5">
+                    <span className="flex items-center gap-1">Fuel Cost <span className="text-blue-400">(claimed back)</span></span>
+                    <span className="font-mono">£{chainResult.summary.totalFuelCost.toFixed(2)}</span>
+                  </div>
+                )}
 
                 {/* Risk flags */}
                 {chainResult.summary.riskFlags.length > 0 && (

@@ -149,3 +149,11 @@
 - [x] Auth logout test
 - [x] calculateJobCost unit tests
 - [x] All 30 tests passing
+
+## Fix: Cost Breakdown Redesign
+- [x] shared/routepilot-types: fuel cost shown but NOT deducted (informational only)
+- [x] shared/routepilot-types: remove time value, wear & tear, risk buffer from totalCosts
+- [x] shared/routepilot-types: travel expenses (to-job + home) are the only deductions
+- [x] Calculator UI: update breakdown lines to reflect new logic
+- [x] Job history/job sheet: update breakdown display
+- [x] Update vitest tests for new calculation logic

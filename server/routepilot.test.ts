@@ -38,25 +38,13 @@ describe("calculateJobCost", () => {
     expect(result.fuelCost).toBe(0);
   });
 
-  it("calculates time value correctly", () => {
+  it("timeValue is always 0 (removed from calculation — claimed back)", () => {
     const result = calculateJobCost(baseInput);
-    // 60 mins / 60 * £15/hr = £15
-    expect(result.timeValue).toBeCloseTo(15, 2);
-  });
-
-  it("returns zero time value when disabled", () => {
-    const result = calculateJobCost({ ...baseInput, enableTimeValue: false });
     expect(result.timeValue).toBe(0);
   });
 
-  it("calculates wear and tear correctly", () => {
+  it("wearTear is always 0 (removed from calculation — claimed back)", () => {
     const result = calculateJobCost(baseInput);
-    // 50 miles * £0.15/mile = £7.50
-    expect(result.wearTear).toBeCloseTo(7.5, 2);
-  });
-
-  it("returns zero wear and tear when disabled", () => {
-    const result = calculateJobCost({ ...baseInput, enableWearTear: false });
     expect(result.wearTear).toBe(0);
   });
 
@@ -72,15 +60,17 @@ describe("calculateJobCost", () => {
   });
 
   it("scores green for profitable high-rate jobs", () => {
+    // £200 fee, 100 miles, fuel reimbursed, no broker fee, no travel costs
+    // netProfit = £200, profitPerMile = £2.00 (>= 0.50), netProfit >= 30 → green
     const result = calculateJobCost({
       ...baseInput,
       deliveryFee: 200,
       distanceMiles: 100,
       durationMins: 90,
-      enableTimeValue: false,
-      enableWearTear: false,
       fuelReimbursed: true,
-      riskBufferPercent: 0,
+      brokerFeePercent: 0,
+      travelToJobCost: 0,
+      travelHomeCost: 0,
     });
     expect(result.worthItScore).toBe("green");
   });
@@ -107,12 +97,14 @@ describe("calculateJobCost", () => {
   });
 
   it("profitPerHour is calculated correctly", () => {
+    // £100 fee, fuel reimbursed, no broker fee, no travel costs → netProfit = £100, 60 mins → £100/hr
     const result = calculateJobCost({
       ...baseInput,
-      enableTimeValue: false,
-      enableWearTear: false,
       fuelReimbursed: true,
-      riskBufferPercent: 0,
+      brokerFeePercent: 0,
+      brokerFeeFixed: 0,
+      travelToJobCost: 0,
+      travelHomeCost: 0,
     });
     // netProfit = £100, durationMins = 60 → £100/hr
     expect(result.profitPerHour).toBeCloseTo(100, 1);

@@ -102,11 +102,6 @@ export const jobsRouter = router({
       const durationMins = routeInfo?.durationMins ?? 60;
 
       const vehicleMpg = input.vehicleMpg ?? settings?.vehicleMpg ?? 35;
-      const hourlyRate = input.hourlyRate ?? settings?.hourlyRate ?? 15;
-      const wearTearPerMile = input.wearTearPerMile ?? settings?.wearTearPerMile ?? 0.15;
-      const riskBufferPercent = input.riskBufferPercent ?? settings?.riskBufferPercent ?? 10;
-      const enableTimeValue = input.enableTimeValue ?? settings?.enableTimeValue ?? true;
-      const enableWearTear = input.enableWearTear ?? settings?.enableWearTear ?? true;
       const fuelPricePerLitre = (input.fuelPricePerLitre ?? 150) / 100; // pence to £
 
       const breakdown = calculateJobCost({
@@ -119,11 +114,6 @@ export const jobsRouter = router({
         vehicleMpg,
         brokerFeePercent: input.brokerFeePercent,
         brokerFeeFixed: input.brokerFeeFixed,
-        hourlyRate,
-        wearTearPerMile,
-        riskBufferPercent,
-        enableTimeValue,
-        enableWearTear,
         travelToJobCost: input.travelToJobCost,
         travelHomeCost: input.travelHomeCost,
       });
@@ -149,11 +139,6 @@ export const jobsRouter = router({
       const durationMins = routeInfo?.durationMins ?? 0;
 
       const vehicleMpg = settings?.vehicleMpg ?? 35;
-      const hourlyRate = settings?.hourlyRate ?? 15;
-      const wearTearPerMile = settings?.wearTearPerMile ?? 0.15;
-      const riskBufferPercent = settings?.riskBufferPercent ?? 10;
-      const enableTimeValue = settings?.enableTimeValue ?? true;
-      const enableWearTear = settings?.enableWearTear ?? true;
       const fuelPricePerLitre = 1.5;
 
       const breakdown = calculateJobCost({
@@ -166,11 +151,6 @@ export const jobsRouter = router({
         vehicleMpg,
         brokerFeePercent: input.brokerFeePercent,
         brokerFeeFixed: input.brokerFeeFixed,
-        hourlyRate,
-        wearTearPerMile,
-        riskBufferPercent,
-        enableTimeValue,
-        enableWearTear,
         travelToJobCost: input.travelToJobCost,
         travelHomeCost: input.travelHomeCost,
       });
