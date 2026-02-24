@@ -17,6 +17,11 @@ export const users = mysqlTable("users", {
   email: varchar("email", { length: 320 }),
   loginMethod: varchar("loginMethod", { length: 64 }),
   role: mysqlEnum("role", ["user", "admin"]).default("user").notNull(),
+  // Subscription
+  subscriptionTier: mysqlEnum("subscriptionTier", ["free", "pro"]).default("free").notNull(),
+  stripeCustomerId: varchar("stripeCustomerId", { length: 64 }),
+  stripeSubscriptionId: varchar("stripeSubscriptionId", { length: 64 }),
+  subscriptionExpiresAt: timestamp("subscriptionExpiresAt"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
   lastSignedIn: timestamp("lastSignedIn").defaultNow().notNull(),
@@ -40,6 +45,8 @@ export const userSettings = mysqlTable("user_settings", {
   enableWearTear: boolean("enableWearTear").default(true).notNull(),
   homePostcode: varchar("homePostcode", { length: 10 }),
   alertsEnabled: boolean("alertsEnabled").default(true).notNull(),
+  notifyBadgeUnlocks: boolean("notifyBadgeUnlocks").default(true).notNull(),
+  notifyWeeklyDigest: boolean("notifyWeeklyDigest").default(true).notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });
@@ -88,6 +95,7 @@ export const jobs = mysqlTable("jobs", {
   pickupAddress: text("pickupAddress"),
   dropoffAddress: text("dropoffAddress"),
   brokerName: varchar("brokerName", { length: 100 }),
+  brokerId: int("brokerId"), // FK to brokers table
   jobReference: varchar("jobReference", { length: 100 }),
   bookingImageUrl: text("bookingImageUrl"),
   notes: text("notes"),
@@ -274,3 +282,131 @@ export const userStreaks = mysqlTable("user_streaks", {
 
 export type UserStreak = typeof userStreaks.$inferSelect;
 export type InsertUserStreak = typeof userStreaks.$inferInsert;
+
+// ─── Brokers ──────────────────────────────────────────────────────────────────
+
+export const brokers = mysqlTable("brokers", {
+  id: int("id").autoincrement().primaryKey(),
+  userId: int("userId").notNull(),
+  name: varchar("name", { length: 100 }).notNull(),
+  feePercent: decimal("feePercent", { precision: 5, scale: 2 }).$type<number>().default(0 as unknown as number),
+  feeFixed: decimal("feeFixed", { precision: 8, scale: 2 }).$type<number>().default(0 as unknown as number),
+  notes: text("notes"),
+  website: varchar("website", { length: 255 }),
+  phone: varchar("phone", { length: 20 }),
+  rating: int("rating"), // 1-5 stars
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type Broker = typeof brokers.$inferSelect;
+export type InsertBroker = typeof brokers.$inferInsert;
+
+// ─── Vehicle Condition Reports ────────────────────────────────────────────────
+
+export const vehicleConditionReports = mysqlTable("vehicle_condition_reports", {
+  id: int("id").autoincrement().primaryKey(),
+  userId: int("userId").notNull(),
+  jobId: int("jobId"),
+  type: mysqlEnum("type", ["pickup", "dropoff"]).notNull(),
+
+  // Vehicle info
+  vehicleReg: varchar("vehicleReg", { length: 20 }),
+  vehicleMake: varchar("vehicleMake", { length: 50 }),
+  vehicleModel: varchar("vehicleModel", { length: 50 }),
+  vehicleColour: varchar("vehicleColour", { length: 30 }),
+
+  // Photos & video
+  photoUrls: json("photoUrls").$type<string[]>().default([]),
+  videoUrl: text("videoUrl"),
+
+  // Damage notes
+  damageNotes: text("damageNotes"),
+  hasDamage: boolean("hasDamage").default(false).notNull(),
+  damageLocations: json("damageLocations").$type<string[]>().default([]), // e.g. ["front_left", "rear_bumper"]
+
+  // Location
+  locationPostcode: varchar("locationPostcode", { length: 10 }),
+  locationLat: decimal("locationLat", { precision: 10, scale: 7 }).$type<number>(),
+  locationLng: decimal("locationLng", { precision: 10, scale: 7 }).$type<number>(),
+
+  // Sharing
+  shareToken: varchar("shareToken", { length: 64 }),
+  shareExpiresAt: timestamp("shareExpiresAt"),
+
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type VehicleConditionReport = typeof vehicleConditionReports.$inferSelect;
+export type InsertVehicleConditionReport = typeof vehicleConditionReports.$inferInsert;
+
+// ─── Driver Lift Marketplace ──────────────────────────────────────────────────
+
+export const lifts = mysqlTable("lifts", {
+  id: int("id").autoincrement().primaryKey(),
+  userId: int("userId").notNull(), // driver offering the lift
+  fromPostcode: varchar("fromPostcode", { length: 10 }).notNull(),
+  fromLabel: varchar("fromLabel", { length: 100 }),
+  toPostcode: varchar("toPostcode", { length: 10 }).notNull(),
+  toLabel: varchar("toLabel", { length: 100 }),
+  departureTime: timestamp("departureTime").notNull(),
+  seats: int("seats").notNull().default(1),
+  pricePerSeat: decimal("pricePerSeat", { precision: 8, scale: 2 }).$type<number>().notNull(),
+  status: mysqlEnum("status", ["active", "full", "cancelled", "completed"]).default("active").notNull(),
+  notes: text("notes"),
+  stripePaymentIntentId: varchar("stripePaymentIntentId", { length: 64 }),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type Lift = typeof lifts.$inferSelect;
+export type InsertLift = typeof lifts.$inferInsert;
+
+export const liftRequests = mysqlTable("lift_requests", {
+  id: int("id").autoincrement().primaryKey(),
+  liftId: int("liftId").notNull(),
+  requesterId: int("requesterId").notNull(),
+  status: mysqlEnum("status", ["pending", "accepted", "rejected", "cancelled", "completed"]).default("pending").notNull(),
+  message: text("message"),
+  seatsRequested: int("seatsRequested").default(1).notNull(),
+  totalPrice: decimal("totalPrice", { precision: 8, scale: 2 }).$type<number>(),
+  stripePaymentIntentId: varchar("stripePaymentIntentId", { length: 64 }),
+  paidAt: timestamp("paidAt"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type LiftRequest = typeof liftRequests.$inferSelect;
+export type InsertLiftRequest = typeof liftRequests.$inferInsert;
+
+// ─── Notifications ────────────────────────────────────────────────────────────
+
+export const notifications = mysqlTable("notifications", {
+  id: int("id").autoincrement().primaryKey(),
+  userId: int("userId").notNull(),
+  type: mysqlEnum("type", ["badge_unlock", "weekly_digest", "lift_request", "lift_accepted", "lift_rejected", "system"]).notNull(),
+  title: varchar("title", { length: 200 }).notNull(),
+  body: text("body"),
+  data: json("data"), // extra payload (e.g. badgeId, liftId)
+  readAt: timestamp("readAt"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type Notification = typeof notifications.$inferSelect;
+export type InsertNotification = typeof notifications.$inferInsert;
+
+// ─── Usage Counters (for free tier limits) ────────────────────────────────────
+
+export const usageCounters = mysqlTable("usage_counters", {
+  id: int("id").autoincrement().primaryKey(),
+  userId: int("userId").notNull().unique(),
+  monthKey: varchar("monthKey", { length: 7 }).notNull().default(""), // YYYY-MM
+  aiScansThisMonth: int("aiScansThisMonth").default(0).notNull(),
+  routeSearchesToday: int("routeSearchesToday").default(0).notNull(),
+  routeSearchDate: varchar("routeSearchDate", { length: 10 }), // YYYY-MM-DD
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type UsageCounter = typeof usageCounters.$inferSelect;
+export type InsertUsageCounter = typeof usageCounters.$inferInsert;

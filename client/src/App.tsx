@@ -17,11 +17,18 @@ import Dashboard from "./pages/Dashboard";
 import Badges from "./pages/Badges";
 import Landing from "./pages/Landing";
 import BottomNav from "./components/BottomNav";
+import VehicleCondition from "./pages/VehicleCondition";
+import FuelFinder from "./pages/FuelFinder";
+import TaxExport from "./pages/TaxExport";
+import Brokers from "./pages/Brokers";
+import Lifts from "./pages/Lifts";
+import Notifications from "./pages/Notifications";
+import Subscription from "./pages/Subscription";
 import { useLocation } from "wouter";
 
 function Router() {
   const [location] = useLocation();
-  const hideNav = location.startsWith("/share/") || location.startsWith("/shared-route/") || location === "/landing";
+  const hideNav = location.startsWith("/share/") || location.startsWith("/shared-route/") || location === "/landing" || location.startsWith("/condition-report/");
 
   return (
     <div className="min-h-dvh bg-background flex flex-col">
@@ -36,6 +43,13 @@ function Router() {
         <Route path="/routes">{() => <RouteFinder />}</Route>
         <Route path="/dashboard" component={Dashboard} />
         <Route path="/badges" component={Badges} />
+        <Route path="/vehicle-condition" component={VehicleCondition} />
+        <Route path="/fuel-finder" component={FuelFinder} />
+        <Route path="/tax-export" component={TaxExport} />
+        <Route path="/brokers" component={Brokers} />
+        <Route path="/lifts" component={Lifts} />
+        <Route path="/notifications" component={Notifications} />
+        <Route path="/subscription" component={Subscription} />
         <Route path="/share/:token" component={SharedChain} />
         <Route path="/shared-route/:token" component={SharedRoute} />
         <Route path="/404" component={NotFound} />

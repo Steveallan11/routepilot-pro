@@ -11,7 +11,8 @@ import { Separator } from "@/components/ui/separator";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
 import { getLoginUrl } from "@/const";
-import { Settings as SettingsIcon, Car, PoundSterling, Bell, User, LogOut } from "lucide-react";
+import { Settings as SettingsIcon, Car, PoundSterling, Bell, User, LogOut, Crown } from "lucide-react";
+import { Link } from "wouter";
 
 export default function Settings() {
   const { user, isAuthenticated, logout } = useAuth();
@@ -248,6 +249,24 @@ export default function Settings() {
                 <p className="text-xs text-muted-foreground">Fuel price drops & chain opportunities</p>
               </div>
               <Switch checked={form.alertsEnabled} onCheckedChange={v => update("alertsEnabled", v)} />
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Pro subscription shortcut */}
+        <Card className="bg-amber-500/10 border-amber-500/30">
+          <CardContent className="pt-4 pb-4">
+            <div className="flex items-center gap-3">
+              <div className="w-9 h-9 rounded-xl bg-amber-500/20 flex items-center justify-center shrink-0">
+                <Crown size={18} className="text-amber-400" />
+              </div>
+              <div className="flex-1">
+                <p className="text-sm font-semibold text-amber-300">RoutePilot Pro</p>
+                <p className="text-xs text-muted-foreground">Unlock Tax Export, Lifts, Condition Logger & more</p>
+              </div>
+              <Link href="/subscription">
+                <Button size="sm" className="bg-amber-500 hover:bg-amber-600 text-black font-semibold shrink-0">Upgrade</Button>
+              </Link>
             </div>
           </CardContent>
         </Card>

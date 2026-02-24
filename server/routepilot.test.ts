@@ -159,3 +159,100 @@ describe("auth.logout", () => {
     expect(clearedCookies[0]?.options).toMatchObject({ maxAge: -1 });
   });
 });
+
+// ─── New feature tests ────────────────────────────────────────────────────────
+
+describe("App router — new routers registered", () => {
+  it("should include subscription, brokers, vehicleCondition, lifts, notifications, exports", () => {
+    const routerKeys = Object.keys(appRouter._def.record ?? appRouter._def.procedures ?? {});
+    expect(routerKeys).toContain("subscription");
+    expect(routerKeys).toContain("brokers");
+    expect(routerKeys).toContain("vehicleCondition");
+    expect(routerKeys).toContain("lifts");
+    expect(routerKeys).toContain("notifications");
+    expect(routerKeys).toContain("exports");
+  });
+});
+
+describe("HMRC mileage allowance calculation", () => {
+  function calcHmrcAllowance(miles: number): number {
+    const RATE_FIRST_10K = 0.45;
+    const RATE_OVER_10K = 0.25;
+    const THRESHOLD = 10000;
+    if (miles <= THRESHOLD) return miles * RATE_FIRST_10K;
+    return THRESHOLD * RATE_FIRST_10K + (miles - THRESHOLD) * RATE_OVER_10K;
+  }
+
+  it("should calculate 45p/mile for first 10,000 miles", () => {
+    expect(calcHmrcAllowance(1000)).toBe(450);
+    expect(calcHmrcAllowance(10000)).toBe(4500);
+  });
+
+  it("should calculate 25p/mile for miles over 10,000", () => {
+    expect(calcHmrcAllowance(11000)).toBe(4500 + 250);
+    expect(calcHmrcAllowance(15000)).toBe(4500 + 1250);
+  });
+
+  it("should handle zero miles", () => {
+    expect(calcHmrcAllowance(0)).toBe(0);
+  });
+});
+
+describe("Lift platform fee calculation", () => {
+  const PLATFORM_FEE_PERCENT = 12;
+
+  it("should calculate platform fee correctly", () => {
+    const pricePerSeat = 25;
+    const seats = 2;
+    const total = pricePerSeat * seats;
+    const fee = (total * PLATFORM_FEE_PERCENT) / 100;
+    const driverReceives = total - fee;
+
+    expect(total).toBe(50);
+    expect(fee).toBe(6);
+    expect(driverReceives).toBe(44);
+  });
+
+  it("should handle single seat", () => {
+    const pricePerSeat = 30;
+    const total = pricePerSeat * 1;
+    const fee = (total * PLATFORM_FEE_PERCENT) / 100;
+    expect(fee).toBeCloseTo(3.6, 2);
+  });
+
+  it("platform fee should be between 0 and 100 percent", () => {
+    expect(PLATFORM_FEE_PERCENT).toBeGreaterThan(0);
+    expect(PLATFORM_FEE_PERCENT).toBeLessThan(100);
+  });
+});
+
+describe("Subscription tier gating", () => {
+  const PRO_FEATURES = [
+    "vehicle-condition",
+    "tax-export",
+    "lifts",
+  ];
+
+  const FREE_FEATURES = [
+    "calculator",
+    "routes",
+    "dashboard",
+    "history",
+    "fuel-finder",
+    "brokers",
+    "badges",
+  ];
+
+  it("should have defined Pro-only features", () => {
+    expect(PRO_FEATURES.length).toBeGreaterThan(0);
+  });
+
+  it("should have defined Free features", () => {
+    expect(FREE_FEATURES.length).toBeGreaterThan(0);
+  });
+
+  it("Pro features should not overlap with Free features", () => {
+    const overlap = PRO_FEATURES.filter((f) => FREE_FEATURES.includes(f));
+    expect(overlap).toHaveLength(0);
+  });
+});

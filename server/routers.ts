@@ -1,4 +1,4 @@
-import { COOKIE_NAME } from "@shared/const";
+import { COOKIE_NAME } from "../shared/const";
 import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
 import { publicProcedure, router } from "./_core/trpc";
@@ -13,6 +13,12 @@ import { scanRouter } from "./routers/scan";
 import { receiptsRouter } from "./routers/receipts";
 import { routesRouter } from "./routers/routes";
 import { dashboardRouter } from "./routers/dashboard";
+import { subscriptionRouter } from "./routers/subscription";
+import { brokersRouter } from "./routers/brokers";
+import { vehicleConditionRouter } from "./routers/vehicleCondition";
+import { liftsRouter } from "./routers/lifts";
+import { notificationsRouter } from "./routers/notifications";
+import { exportsRouter } from "./routers/exports";
 
 export const appRouter = router({
   system: systemRouter,
@@ -35,6 +41,12 @@ export const appRouter = router({
   receipts: receiptsRouter,
   routes: routesRouter,
   dashboard: dashboardRouter,
+  subscription: subscriptionRouter,
+  brokers: brokersRouter,
+  vehicleCondition: vehicleConditionRouter,
+  lifts: liftsRouter,
+  notifications: notificationsRouter,
+  exports: exportsRouter,
 });
 
 export type AppRouter = typeof appRouter;
