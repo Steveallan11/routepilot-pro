@@ -1341,14 +1341,18 @@ export default function Jobs({ prefilledDate: initialDate }: { prefilledDate?: s
           onClose={() => { setShowAddJob(false); setAddJobDate(undefined); }}
           onSaved={(savedJob) => {
             refetch();
-            if (savedJob?.scheduledPickupAt) {
-              scheduleJobReminder({
-                jobId: savedJob.id,
-                pickupPostcode: savedJob.pickupPostcode,
-                dropoffPostcode: savedJob.dropoffPostcode,
-                scheduledPickupAt: savedJob.scheduledPickupAt,
-                brokerName: savedJob.brokerName,
-              });
+            if (savedJob?.scheduledPickupAt && savedJob.id) {
+              try {
+                scheduleJobReminder({
+                  jobId: savedJob.id,
+                  pickupPostcode: savedJob.pickupPostcode,
+                  dropoffPostcode: savedJob.dropoffPostcode,
+                  scheduledPickupAt: savedJob.scheduledPickupAt,
+                  brokerName: savedJob.brokerName,
+                });
+              } catch (e) {
+                console.warn("[Reminder] Could not schedule reminder:", e);
+              }
             }
           }}
           prefilledDate={addJobDate}

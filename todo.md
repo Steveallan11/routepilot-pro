@@ -187,3 +187,8 @@
 ## Bug Fix: Create Job Error
 - [x] Diagnose runtime error when creating a job — jobs.create did not return insertId, causing crash in notification scheduler
 - [x] Fix: return jobId from create procedure; fix frontend to read it correctly
+
+## Bug Fix: Create Job Error (Round 2)
+- [x] Fix insertId extraction: use .values({...}).$returningId() (correct Drizzle chain order)
+- [x] Add defensive try/catch in scheduleJobReminder (iOS Safari / browsers without Notification API)
+- [x] Wrap onSaved reminder call in try/catch so job save never crashes even if notifications fail

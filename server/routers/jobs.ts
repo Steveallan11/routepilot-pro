@@ -214,9 +214,12 @@ export const jobsRouter = router({
         dropoffContactName: input.dropoffContactName ?? null,
         dropoffContactPhone: input.dropoffContactPhone ?? null,
         customerName: input.customerName ?? null,
-      });
+      }).$returningId();
 
-      const insertedId = (insertResult as unknown as { insertId?: number })?.insertId ?? 0;
+      // $returningId() returns an array of objects with primary key fields
+      const insertedId = Array.isArray(insertResult) && insertResult.length > 0
+        ? Number((insertResult[0] as { id?: number | bigint })?.id ?? 0)
+        : 0;
 
       // Fire gamification in background (don't block response)
       checkAndAwardBadges(ctx.user.id, {

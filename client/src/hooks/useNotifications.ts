@@ -36,12 +36,15 @@ export function useNotifications() {
 
   // Request notification permission
   const requestPermission = useCallback(async (): Promise<boolean> => {
-    if (!("Notification" in window)) return false;
-    if (Notification.permission === "granted") return true;
-    if (Notification.permission === "denied") return false;
-
-    const result = await Notification.requestPermission();
-    return result === "granted";
+    try {
+      if (!('Notification' in window)) return false;
+      if (Notification.permission === 'granted') return true;
+      if (Notification.permission === 'denied') return false;
+      const result = await Notification.requestPermission();
+      return result === 'granted';
+    } catch {
+      return false;
+    }
   }, []);
 
   // Check current permission state
@@ -51,6 +54,7 @@ export function useNotifications() {
 
   // Schedule a 30-minute reminder for a job
   const scheduleJobReminder = useCallback(async (job: JobReminder): Promise<boolean> => {
+    try {
     if (!hasPermission()) {
       const granted = await requestPermission();
       if (!granted) return false;
@@ -103,6 +107,10 @@ export function useNotifications() {
     }, delay);
 
     return true;
+    } catch (e) {
+      console.warn("[Reminder] scheduleJobReminder error:", e);
+      return false;
+    }
   }, [hasPermission, requestPermission]);
 
   // Cancel a scheduled reminder (by closing the notification if shown)
