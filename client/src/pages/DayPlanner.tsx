@@ -17,7 +17,7 @@ export default function DayPlanner() {
     { enabled: isAuthenticated }
   );
   const { data: chainsData } = trpc.chains.list.useQuery(
-    { limit: 10 },
+    undefined,
     { enabled: isAuthenticated }
   );
 
@@ -30,7 +30,7 @@ export default function DayPlanner() {
     return j.scheduledPickupAt.toISOString?.()?.startsWith(selectedDate) ?? true;
   });
 
-  const todayChains = (chainsData?.chains ?? []).filter(c => {
+  const todayChains = (chainsData ?? []).filter((c: { scheduledDate?: Date | null }) => {
     if (!c.scheduledDate) return false;
     return c.scheduledDate.toISOString?.()?.startsWith(selectedDate) ?? false;
   });

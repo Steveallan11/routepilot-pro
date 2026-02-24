@@ -10,8 +10,11 @@ import { getLoginUrl } from "@/const";
 import {
   Link2, Plus, Trash2, ArrowRight, Train, Bus, Car, Footprints,
   AlertTriangle, TrendingUp, Clock, MapPin, PoundSterling, Save,
-  ChevronDown, ChevronUp, Home, Navigation, Check
+  ChevronDown, ChevronUp, Home, Navigation, Check, Settings, CalendarPlus
 } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
 
 // Safe number formatter — prevents crashes when TiDB returns decimals as strings
@@ -23,13 +26,68 @@ function fmt(val: unknown, decimals = 2): string {
 
 const modeIcons: Record<string, React.ReactNode> = {
   train: <Train size={14} />,
+  TRAIN: <Train size={14} />,
+  RAIL: <Train size={14} />,
   bus: <Bus size={14} />,
+  BUS: <Bus size={14} />,
   tram: <Train size={14} />,
+  TRAM: <Train size={14} />,
+  SUBWAY: <Train size={14} />,
   taxi: <Car size={14} />,
+  OTHER: <Car size={14} />,
   walk: <Footprints size={14} />,
+  WALK: <Footprints size={14} />,
   drive: <Car size={14} />,
   scooter: <Car size={14} />,
 };
+
+const stepModeColors: Record<string, string> = {
+  WALK: "text-gray-400",
+  TRAIN: "text-blue-400",
+  RAIL: "text-blue-400",
+  BUS: "text-green-400",
+  TRAM: "text-purple-400",
+  SUBWAY: "text-indigo-400",
+  OTHER: "text-yellow-400",
+};
+
+function StepDetail({ step }: { step: TransitStep }) {
+  const icon = modeIcons[step.mode] ?? <Navigation size={12} />;
+  const color = stepModeColors[step.mode] ?? "text-foreground";
+  const isWalk = step.mode === "WALK";
+  return (
+    <div className="flex items-start gap-2 py-1.5">
+      <div className={cn("mt-0.5 shrink-0", color)}>{icon}</div>
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center justify-between gap-2">
+          <span className={cn("text-xs font-medium", color)}>
+            {isWalk ? `Walk ${step.durationMins} min` : step.instruction}
+          </span>
+          <span className="text-[10px] text-muted-foreground font-mono shrink-0">
+            {step.durationMins} min
+          </span>
+        </div>
+        {!isWalk && (
+          <div className="text-[10px] text-muted-foreground mt-0.5 space-y-0.5">
+            {step.departureStop && step.arrivalStop && (
+              <p>{step.departureStop} → {step.arrivalStop}</p>
+            )}
+            {(step.lineShortName || step.lineName) && (
+              <p className="font-medium">
+                {step.lineShortName ?? step.lineName}
+                {step.operator && ` · ${step.operator}`}
+                {step.numStops && ` · ${step.numStops} stops`}
+              </p>
+            )}
+            {step.departureTime && step.arrivalTime && (
+              <p className="font-mono">{step.departureTime} → {step.arrivalTime}</p>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
 
 const modeColors: Record<string, string> = {
   train: "text-blue-400",
@@ -40,6 +98,21 @@ const modeColors: Record<string, string> = {
   drive: "text-orange-400",
 };
 
+type TransitStep = {
+  mode: string;
+  instruction: string;
+  durationMins: number;
+  distanceMetres: number;
+  departureStop?: string;
+  arrivalStop?: string;
+  lineName?: string;
+  lineShortName?: string;
+  operator?: string;
+  departureTime?: string;
+  arrivalTime?: string;
+  numStops?: number;
+};
+
 type TransportOption = {
   mode: string;
   durationMins: number;
@@ -48,6 +121,8 @@ type TransportOption = {
   changes?: number;
   departureTime?: string;
   arrivalTime?: string;
+  steps?: TransitStep[];
+  summary?: string;
 };
 
 type TransportLeg = {
@@ -71,6 +146,7 @@ type ChainJob = {
   vehicleModel?: string | null;
   vehicleReg?: string | null;
   brokerName?: string | null;
+  scheduledPickupAt?: Date | string | null;
 };
 
 type ChainResult = {
@@ -89,8 +165,9 @@ type ChainResult = {
     totalDurationMins: number;
     totalDistanceMiles: number;
     profitPerHour: number;
-    riskFlags: string[];
+    riskFlags?: string[];
   };
+  riskFlags: string[];
 };
 
 // Expandable transport leg card
@@ -160,39 +237,46 @@ function TransportLegCard({
             {leg.options.map((opt, oi) => {
               const isSelected = oi === leg.selectedOptionIndex;
               return (
-                <button
-                  key={oi}
-                  onClick={() => { onSelectOption(legIndex, oi); setExpanded(false); }}
-                  className={cn(
-                    "w-full text-left rounded-lg p-2.5 border transition-all",
-                    isSelected
-                      ? "border-primary/60 bg-primary/10"
-                      : "border-border/50 bg-secondary/50 hover:border-border"
+                <div key={oi} className={cn(
+                  "rounded-lg border transition-all",
+                  isSelected ? "border-primary/60 bg-primary/10" : "border-border/50 bg-secondary/50"
+                )}>
+                  <button
+                    onClick={() => { onSelectOption(legIndex, oi); }}
+                    className="w-full text-left p-2.5"
+                  >
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        {isSelected && <Check size={12} className="text-primary" />}
+                        <span className={cn("flex items-center gap-1 text-xs font-semibold", modeColors[opt.mode] ?? "text-foreground")}>
+                          {modeIcons[opt.mode] ?? modeIcons[opt.mode?.toLowerCase()] ?? <Navigation size={13} />}
+                          {opt.summary ?? opt.mode}
+                        </span>
+                        {opt.operator && <span className="text-xs text-muted-foreground">{opt.operator}</span>}
+                        {opt.changes != null && opt.changes > 0 && (
+                          <span className="text-xs text-muted-foreground">{opt.changes} change{opt.changes > 1 ? "s" : ""}</span>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-2 text-xs">
+                        <span className="text-muted-foreground">{Math.round(opt.durationMins)} min</span>
+                        <span className="font-bold font-mono text-foreground">£{fmt(opt.cost)}</span>
+                      </div>
+                    </div>
+                    {opt.departureTime && opt.departureTime !== "On demand" && (
+                      <div className="text-xs text-muted-foreground mt-1 ml-5 font-mono">
+                        Departs {opt.departureTime} · Arrives {opt.arrivalTime}
+                      </div>
+                    )}
+                  </button>
+                  {/* Step-by-step breakdown */}
+                  {isSelected && opt.steps && opt.steps.length > 0 && (
+                    <div className="px-3 pb-2.5 border-t border-border/30 mt-0.5 divide-y divide-border/20">
+                      {opt.steps.map((step, si) => (
+                        <StepDetail key={si} step={step} />
+                      ))}
+                    </div>
                   )}
-                >
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      {isSelected && <Check size={12} className="text-primary" />}
-                      <span className={cn("flex items-center gap-1 text-xs font-semibold", modeColors[opt.mode] ?? "text-foreground")}>
-                        {modeIcons[opt.mode]}
-                        {opt.mode.charAt(0).toUpperCase() + opt.mode.slice(1)}
-                      </span>
-                      {opt.operator && <span className="text-xs text-muted-foreground">{opt.operator}</span>}
-                      {opt.changes != null && opt.changes > 0 && (
-                        <span className="text-xs text-muted-foreground">{opt.changes} change{opt.changes > 1 ? "s" : ""}</span>
-                      )}
-                    </div>
-                    <div className="flex items-center gap-2 text-xs">
-                      <span className="text-muted-foreground">{Math.round(opt.durationMins)} min</span>
-                      <span className="font-bold font-mono text-foreground">£{fmt(opt.cost)}</span>
-                    </div>
-                  </div>
-                  {opt.departureTime && opt.departureTime !== "On demand" && (
-                    <div className="text-xs text-muted-foreground mt-1 ml-5">
-                      {opt.departureTime} → {opt.arrivalTime}
-                    </div>
-                  )}
-                </button>
+                </div>
               );
             })}
             {leg.noTransitZone && (
@@ -210,6 +294,13 @@ function TransportLegCard({
 
 // Drive leg card
 function DriveLegCard({ job, jobIndex }: { job: ChainJob; jobIndex: number }) {
+  const scheduledTime = job.scheduledPickupAt
+    ? new Date(job.scheduledPickupAt as string | Date).toLocaleString("en-GB", {
+        weekday: "short", day: "numeric", month: "short",
+        hour: "2-digit", minute: "2-digit",
+      })
+    : null;
+
   return (
     <div className="flex items-start gap-3 py-2">
       <div className="flex flex-col items-center">
@@ -229,7 +320,12 @@ function DriveLegCard({ job, jobIndex }: { job: ChainJob; jobIndex: number }) {
             <ArrowRight size={11} className="text-muted-foreground" />
             <span className="font-mono">{job.dropoffPostcode}</span>
           </div>
-          <div className="flex items-center gap-3 text-xs text-muted-foreground">
+          <div className="flex items-center gap-3 text-xs text-muted-foreground flex-wrap">
+            {scheduledTime && (
+              <span className="flex items-center gap-1 text-primary/80 font-medium">
+                <Clock size={10} /> Pickup {scheduledTime}
+              </span>
+            )}
             {job.estimatedDistanceMiles && (
               <span>{fmt(job.estimatedDistanceMiles, 1)} mi</span>
             )}
@@ -252,14 +348,22 @@ export default function ChainPlanner() {
   const [selectedJobIds, setSelectedJobIds] = useState<number[]>([]);
   const [chainResult, setChainResult] = useState<ChainResult | null>(null);
   const [legSelections, setLegSelections] = useState<Array<{ legIndex: number; optionIndex: number }>>([]);
+  const [showHomePrompt, setShowHomePrompt] = useState(false);
+  const [homePostcodeInput, setHomePostcodeInput] = useState("");
 
   const { data: jobsData } = trpc.jobs.list.useQuery(
     { status: "planned", limit: 20 },
     { enabled: isAuthenticated }
   );
+  const { data: settings, refetch: refetchSettings } = trpc.settings.get.useQuery(
+    undefined,
+    { enabled: isAuthenticated }
+  );
 
   const planMutation = trpc.chains.plan.useMutation();
-  const createChainMutation = trpc.chains.create.useMutation();
+  const saveChainMutation = trpc.chains.save.useMutation();
+  const saveSettingsMutation = trpc.settings.upsert.useMutation();
+  const createJobMutation = trpc.jobs.create.useMutation();
 
   const plannedJobs = jobsData?.jobs ?? [];
 
@@ -281,6 +385,11 @@ export default function ChainPlanner() {
       toast.error("Select at least 2 jobs to plan a chain");
       return;
     }
+    // Prompt for home postcode if not set
+    if (!settings?.homePostcode) {
+      setShowHomePrompt(true);
+      return;
+    }
     try {
       const result = await planMutation.mutateAsync({
         jobIds: selectedJobIds,
@@ -289,6 +398,55 @@ export default function ChainPlanner() {
       setChainResult(result as ChainResult);
     } catch {
       toast.error("Failed to plan chain. Please try again.");
+    }
+  };
+
+  const handleSaveHomePostcode = async () => {
+    if (!homePostcodeInput.trim()) return;
+    try {
+      await saveSettingsMutation.mutateAsync({ homePostcode: homePostcodeInput.trim().toUpperCase() });
+      await refetchSettings();
+      setShowHomePrompt(false);
+      // Now plan the chain
+      try {
+        const result = await planMutation.mutateAsync({
+          jobIds: selectedJobIds,
+          legSelections,
+        });
+        setChainResult(result as ChainResult);
+      } catch {
+        toast.error("Failed to plan chain. Please try again.");
+      }
+    } catch {
+      toast.error("Failed to save home postcode");
+    }
+  };
+
+  const handleSaveToCalendar = async () => {
+    if (!chainResult || chainResult.jobs.length === 0) return;
+    // Create a calendar event by creating a "chain" job that spans the whole day
+    // We use the first job's scheduled pickup time as the event time
+    const firstJob = chainResult.jobs[0]!;
+    const scheduledAt = firstJob.scheduledPickupAt
+      ? new Date(firstJob.scheduledPickupAt as string | Date).toISOString().slice(0, 16)
+      : new Date().toISOString().slice(0, 16);
+    const label = chainResult.jobs.map(j => `${j.pickupPostcode}→${j.dropoffPostcode}`).join(" + ");
+    try {
+      await createJobMutation.mutateAsync({
+        pickupPostcode: firstJob.pickupPostcode,
+        dropoffPostcode: chainResult.jobs[chainResult.jobs.length - 1]!.dropoffPostcode,
+        deliveryFee: Number(chainResult.summary.totalEarnings),
+        fuelDeposit: 0,
+        brokerFeeFixed: 0,
+        brokerFeePercent: 0,
+        fuelReimbursed: false,
+        scheduledPickupAt: scheduledAt,
+        notes: `Chain: ${label}\nNet profit: £${fmt(chainResult.summary.totalNetProfit)}\nJobs: ${chainResult.jobs.length}`,
+        brokerName: "Chain",
+      });
+      toast.success("Chain added to Calendar!");
+    } catch {
+      toast.error("Failed to add to calendar");
     }
   };
 
@@ -343,10 +501,8 @@ export default function ChainPlanner() {
   const handleSaveChain = async () => {
     if (!chainResult) return;
     try {
-      await createChainMutation.mutateAsync({
+      await saveChainMutation.mutateAsync({
         jobIds: selectedJobIds,
-        transportLegs: chainResult.transportLegs,
-        summary: chainResult.summary,
       });
       toast.success("Chain saved!");
     } catch {
@@ -420,6 +576,43 @@ export default function ChainPlanner() {
   };
 
   return (
+    <>
+      {/* Home postcode prompt dialog */}
+      {showHomePrompt && (
+        <Dialog open onOpenChange={(o) => !o && setShowHomePrompt(false)}>
+          <DialogContent className="max-w-sm">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <Home size={18} className="text-primary" /> Set Your Home Postcode
+              </DialogTitle>
+            </DialogHeader>
+            <p className="text-sm text-muted-foreground">
+              Your home postcode is used to calculate travel costs to the first pickup and back after the last dropoff.
+            </p>
+            <div className="space-y-2">
+              <Label className="text-xs text-muted-foreground">Home Postcode</Label>
+              <Input
+                value={homePostcodeInput}
+                onChange={e => setHomePostcodeInput(e.target.value.toUpperCase())}
+                placeholder="e.g. NN4 6RA"
+                className="font-mono uppercase"
+                onKeyDown={e => e.key === "Enter" && handleSaveHomePostcode()}
+              />
+            </div>
+            <DialogFooter className="flex gap-2">
+              <Button variant="outline" onClick={() => {
+                setShowHomePrompt(false);
+                // Plan anyway without home postcode
+                planMutation.mutateAsync({ jobIds: selectedJobIds, legSelections }).then(r => setChainResult(r as ChainResult)).catch(() => toast.error("Failed to plan chain"));
+              }}>Skip</Button>
+              <Button onClick={handleSaveHomePostcode} disabled={saveSettingsMutation.isPending || !homePostcodeInput.trim()}>
+                {saveSettingsMutation.isPending ? "Saving..." : "Save & Plan"}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      )}
+
     <div className="pb-24 pt-4">
       <div className="px-4 mb-5">
         <div className="flex items-center gap-2 mb-1">
@@ -614,9 +807,9 @@ export default function ChainPlanner() {
                   </div>
                 )}
 
-                {chainResult.summary.riskFlags.length > 0 && (
+                {(chainResult.riskFlags ?? chainResult.summary.riskFlags ?? []).length > 0 && (
                   <div className="space-y-1.5 mb-4">
-                    {chainResult.summary.riskFlags.map((flag, i) => (
+                    {(chainResult.riskFlags ?? chainResult.summary.riskFlags ?? []).map((flag, i) => (
                       <div key={i} className="flex items-start gap-2 text-xs text-yellow-400 bg-yellow-400/10 rounded-lg px-3 py-2">
                         <AlertTriangle size={12} className="flex-shrink-0 mt-0.5" />
                         <span>{flag}</span>
@@ -625,15 +818,22 @@ export default function ChainPlanner() {
                   </div>
                 )}
 
-                <Button onClick={handleSaveChain} disabled={createChainMutation.isPending} className="w-full">
-                  <Save size={16} className="mr-2" />
-                  {createChainMutation.isPending ? "Saving..." : "Save Chain"}
-                </Button>
+                <div className="flex gap-2">
+                  <Button onClick={handleSaveChain} disabled={saveChainMutation.isPending} className="flex-1">
+                    <Save size={16} className="mr-2" />
+                    {saveChainMutation.isPending ? "Saving..." : "Save Chain"}
+                  </Button>
+                  <Button variant="outline" onClick={handleSaveToCalendar} disabled={createJobMutation.isPending} className="flex-1 gap-1.5">
+                    <CalendarPlus size={16} />
+                    {createJobMutation.isPending ? "Adding..." : "Add to Calendar"}
+                  </Button>
+                </div>
               </CardContent>
             </Card>
           </div>
         )}
       </div>
     </div>
+    </>
   );
 }

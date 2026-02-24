@@ -16,7 +16,7 @@ import {
   Circle, XCircle, AlertCircle, Train, Building2, Hash, FileText,
   Fuel, ChevronDown, ChevronUp, Camera, Loader2, Navigation,
   Trash2, TrendingUp, TrendingDown, Receipt, Search, Filter,
-  CalendarDays, Route, Image as ImageIcon, StickyNote
+  CalendarDays, Route, Image as ImageIcon, StickyNote, Copy, Pencil
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { calculateJobCost } from "../../../shared/routepilot-types";
@@ -134,11 +134,13 @@ function formatDateTime(date: Date | null) {
 
 // ─── Job Detail Sheet ─────────────────────────────────────────────────────────
 
-function JobDetailSheet({ job, onClose, onStatusChange, onDelete }: {
+function JobDetailSheet({ job, onClose, onStatusChange, onDelete, onEdit, onDuplicate }: {
   job: Job;
   onClose: () => void;
   onStatusChange: (id: number, status: JobStatus) => void;
   onDelete: (id: number) => void;
+  onEdit?: (job: Job) => void;
+  onDuplicate?: (id: number) => void;
 }) {
   const cfg = STATUS_CONFIG[job.status];
   const StatusIcon = cfg.icon;
@@ -470,6 +472,20 @@ function JobDetailSheet({ job, onClose, onStatusChange, onDelete }: {
               </Button>
             )}
 
+            {/* Edit & Duplicate */}
+            <div className="flex gap-2">
+              {onEdit && (
+                <Button variant="outline" className="flex-1 gap-1.5" onClick={() => { onEdit(job); onClose(); }}>
+                  <Pencil size={14} /> Edit
+                </Button>
+              )}
+              {onDuplicate && (
+                <Button variant="outline" className="flex-1 gap-1.5" onClick={() => { onDuplicate(job.id); onClose(); }}>
+                  <Copy size={14} /> Duplicate
+                </Button>
+              )}
+            </div>
+
             {/* Delete */}
             {!showDeleteConfirm ? (
               <Button variant="ghost" className="w-full text-destructive/70 hover:text-destructive" onClick={() => setShowDeleteConfirm(true)}>
@@ -527,10 +543,23 @@ function AddJobSheet({ onClose, onSaved, prefilledDate }: { onClose: () => void;
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const { data: userSettings } = trpc.settings.get.useQuery(undefined, { enabled: isAuthenticated });
+  const { data: brokersData } = trpc.brokers.list.useQuery(undefined, { enabled: isAuthenticated });
   const calculateMutation = trpc.jobs.calculate.useMutation();
   const createJobMutation = trpc.jobs.create.useMutation();
   const uploadImageMutation = trpc.scan.uploadImage.useMutation();
   const extractBookingMutation = trpc.scan.extractBooking.useMutation();
+
+  // Broker auto-match: when brokerName changes, auto-fill fee percent from known brokers
+  const matchedBroker = (brokersData ?? []).find(
+    b => b.name.toLowerCase() === brokerName.toLowerCase()
+  );
+  const handleBrokerNameChange = (name: string) => {
+    setBrokerName(name);
+    const match = (brokersData ?? []).find(b => b.name.toLowerCase() === name.toLowerCase());
+    if (match && Number(match.feePercent) > 0) {
+      setBrokerFeePercent(String(Number(match.feePercent)));
+    }
+  };
 
   async function handleCalculate() {
     if (!pickup || !dropoff || !fee) {
@@ -798,7 +827,18 @@ function AddJobSheet({ onClose, onSaved, prefilledDate }: { onClose: () => void;
                 <div className="grid grid-cols-2 gap-3">
                   <div>
                     <Label className="text-xs text-muted-foreground mb-1.5 block">Broker Name</Label>
-                    <Input value={brokerName} onChange={e => setBrokerName(e.target.value)} placeholder="Waylands Group" />
+                    <Input
+                      value={brokerName}
+                      onChange={e => handleBrokerNameChange(e.target.value)}
+                      placeholder="Waylands Group"
+                      list="broker-names-add"
+                    />
+                    <datalist id="broker-names-add">
+                      {(brokersData ?? []).map(b => <option key={b.id} value={b.name} />)}
+                    </datalist>
+                    {matchedBroker && (
+                      <p className="text-[10px] text-primary mt-0.5">✓ Matched — {Number(matchedBroker.feePercent)}% fee auto-filled</p>
+                    )}
                   </div>
                   <div>
                     <Label className="text-xs text-muted-foreground mb-1.5 block">Job Reference</Label>
@@ -1000,6 +1040,182 @@ function AddJobSheet({ onClose, onSaved, prefilledDate }: { onClose: () => void;
   );
 }
 
+// ─── Edit Job Sheet ──────────────────────────────────────────────────────────
+
+function EditJobSheet({ job, onClose, onSaved }: { job: Job; onClose: () => void; onSaved: () => void }) {
+  const { isAuthenticated } = useAuth();
+  const [pickup, setPickup] = useState(job.pickupPostcode);
+  const [dropoff, setDropoff] = useState(job.dropoffPostcode);
+  const [fee, setFee] = useState(String(job.deliveryFee));
+  const [fuelDeposit, setFuelDeposit] = useState(String(job.fuelDeposit));
+  const [fuelReimbursed, setFuelReimbursed] = useState(job.fuelReimbursed);
+  const [brokerFeePercent, setBrokerFeePercent] = useState(String(job.brokerFeePercent ?? 0));
+  const [brokerName, setBrokerName] = useState(job.brokerName ?? "");
+  const [jobRef, setJobRef] = useState(job.jobReference ?? "");
+  const [scheduledDate, setScheduledDate] = useState(
+    job.scheduledPickupAt ? new Date(job.scheduledPickupAt).toISOString().slice(0, 16) : ""
+  );
+  const [travelToJob, setTravelToJob] = useState(String(job.travelToJobCost ?? 0));
+  const [travelToJobMode, setTravelToJobMode] = useState(job.travelToJobMode ?? "none");
+  const [travelHome, setTravelHome] = useState(String(job.travelHomeCost ?? 0));
+  const [travelHomeMode, setTravelHomeMode] = useState(job.travelHomeMode ?? "none");
+  const [notes, setNotes] = useState(job.notes ?? "");
+  const [vehicleReg, setVehicleReg] = useState(job.vehicleReg ?? "");
+  const [vehicleMake, setVehicleMake] = useState(job.vehicleMake ?? "");
+  const [vehicleModel, setVehicleModel] = useState(job.vehicleModel ?? "");
+  const [vehicleColour, setVehicleColour] = useState(job.vehicleColour ?? "");
+  const [vehicleFuelType, setVehicleFuelType] = useState<"petrol" | "diesel" | "electric" | "hybrid" | "unknown">(
+    (job.vehicleFuelType as "petrol" | "diesel" | "electric" | "hybrid" | "unknown") ?? "unknown"
+  );
+  const [showExtra, setShowExtra] = useState(!!(job.vehicleReg || job.brokerName || job.notes));
+
+  const { data: brokersData } = trpc.brokers.list.useQuery(undefined, { enabled: isAuthenticated });
+  const editMutation = trpc.jobs.edit.useMutation();
+
+  // Broker auto-match: when brokerName changes, auto-fill fee percent from known brokers
+  const matchedBroker = (brokersData ?? []).find(
+    b => b.name.toLowerCase() === brokerName.toLowerCase()
+  );
+  const handleBrokerNameChange = (name: string) => {
+    setBrokerName(name);
+    const match = (brokersData ?? []).find(b => b.name.toLowerCase() === name.toLowerCase());
+    if (match && Number(match.feePercent) > 0) {
+      setBrokerFeePercent(String(Number(match.feePercent)));
+    }
+  };
+
+  async function handleSave() {
+    if (!pickup || !dropoff || !fee) {
+      toast.error("Fill in pickup, dropoff and delivery fee");
+      return;
+    }
+    try {
+      await editMutation.mutateAsync({
+        id: job.id,
+        pickupPostcode: pickup,
+        dropoffPostcode: dropoff,
+        deliveryFee: parseFloat(fee) || 0,
+        fuelDeposit: parseFloat(fuelDeposit) || 0,
+        fuelReimbursed,
+        brokerFeePercent: parseFloat(brokerFeePercent) || 0,
+        brokerFeeFixed: 0,
+        travelToJobCost: parseFloat(travelToJob) || 0,
+        travelToJobMode: travelToJobMode as "train" | "bus" | "taxi" | "own_car" | "none",
+        travelHomeCost: parseFloat(travelHome) || 0,
+        travelHomeMode: travelHomeMode as "train" | "bus" | "taxi" | "own_car" | "none",
+        scheduledPickupAt: scheduledDate || undefined,
+        brokerName: brokerName || undefined,
+        jobReference: jobRef || undefined,
+        notes: notes || undefined,
+        vehicleReg: vehicleReg || undefined,
+        vehicleMake: vehicleMake || undefined,
+        vehicleModel: vehicleModel || undefined,
+        vehicleColour: vehicleColour || undefined,
+        vehicleFuelType: vehicleFuelType !== "unknown" ? vehicleFuelType : undefined,
+      });
+      toast.success("Job updated!");
+      onSaved();
+      onClose();
+    } catch {
+      toast.error("Failed to update job");
+    }
+  }
+
+  return (
+    <Sheet open onOpenChange={(o) => !o && onClose()}>
+      <SheetContent side="bottom" className="h-[95dvh] overflow-y-auto rounded-t-2xl px-0 pb-8">
+        <SheetHeader className="px-4 pb-3 border-b border-border sticky top-0 bg-background z-10">
+          <SheetTitle className="text-base font-bold flex items-center gap-2">
+            <Pencil size={16} className="text-primary" /> Edit Job
+          </SheetTitle>
+        </SheetHeader>
+        <div className="px-4 pt-4 space-y-4">
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <Label className="text-xs text-muted-foreground mb-1.5 block">Pickup Postcode</Label>
+              <Input value={pickup} onChange={e => setPickup(e.target.value.toUpperCase())} placeholder="NN4 6RA" className="font-mono uppercase" />
+            </div>
+            <div>
+              <Label className="text-xs text-muted-foreground mb-1.5 block">Dropoff Postcode</Label>
+              <Input value={dropoff} onChange={e => setDropoff(e.target.value.toUpperCase())} placeholder="BS34 6FE" className="font-mono uppercase" />
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <Label className="text-xs text-muted-foreground mb-1.5 block">Delivery Fee (£)</Label>
+              <Input type="number" value={fee} onChange={e => setFee(e.target.value)} placeholder="85.00" className="font-mono" />
+            </div>
+            <div>
+              <Label className="text-xs text-muted-foreground mb-1.5 block">Broker Fee (%)</Label>
+              <Input type="number" value={brokerFeePercent} onChange={e => setBrokerFeePercent(e.target.value)} placeholder="0" className="font-mono" />
+            </div>
+          </div>
+          <div className="flex items-center justify-between py-2 px-3 bg-secondary rounded-xl">
+            <div>
+              <p className="text-sm font-medium">Fuel Reimbursed</p>
+              <p className="text-xs text-muted-foreground">Broker pays for fuel</p>
+            </div>
+            <Switch checked={fuelReimbursed} onCheckedChange={setFuelReimbursed} />
+          </div>
+          <div>
+            <Label className="text-xs text-muted-foreground mb-1.5 block flex items-center gap-1">
+              <CalendarDays size={11} /> Scheduled Date & Time
+            </Label>
+            <Input type="datetime-local" value={scheduledDate} onChange={e => setScheduledDate(e.target.value)} />
+          </div>
+          <button onClick={() => setShowExtra(v => !v)} className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors">
+            {showExtra ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+            {showExtra ? "Hide" : "Show"} extra details
+          </button>
+          {showExtra && (
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <Label className="text-xs text-muted-foreground mb-1.5 block">Broker Name</Label>
+                  <Input
+                    value={brokerName}
+                    onChange={e => handleBrokerNameChange(e.target.value)}
+                    placeholder="e.g. BCA"
+                    list="broker-names-edit"
+                  />
+                  <datalist id="broker-names-edit">
+                    {(brokersData ?? []).map(b => <option key={b.id} value={b.name} />)}
+                  </datalist>
+                  {matchedBroker && (
+                    <p className="text-[10px] text-primary mt-0.5">✓ Matched — {Number(matchedBroker.feePercent)}% fee auto-filled</p>
+                  )}
+                </div>
+                <div>
+                  <Label className="text-xs text-muted-foreground mb-1.5 block">Job Reference</Label>
+                  <Input value={jobRef} onChange={e => setJobRef(e.target.value)} placeholder="REF123" />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <Label className="text-xs text-muted-foreground mb-1.5 block">Vehicle Reg</Label>
+                  <Input value={vehicleReg} onChange={e => setVehicleReg(e.target.value.toUpperCase())} placeholder="AB12 CDE" className="font-mono uppercase" />
+                </div>
+                <div>
+                  <Label className="text-xs text-muted-foreground mb-1.5 block">Make</Label>
+                  <Input value={vehicleMake} onChange={e => setVehicleMake(e.target.value)} placeholder="Ford" />
+                </div>
+              </div>
+              <div>
+                <Label className="text-xs text-muted-foreground mb-1.5 block">Notes</Label>
+                <Input value={notes} onChange={e => setNotes(e.target.value)} placeholder="Any notes..." />
+              </div>
+            </div>
+          )}
+          <Button className="w-full" onClick={handleSave} disabled={editMutation.isPending}>
+            {editMutation.isPending ? <Loader2 size={16} className="animate-spin mr-2" /> : <Pencil size={16} className="mr-2" />}
+            Save Changes
+          </Button>
+        </div>
+      </SheetContent>
+    </Sheet>
+  );
+}
+
 // ─── Job List Item ────────────────────────────────────────────────────────────
 
 function JobListItem({ job, onClick, onSwipeRight, onSwipeLeft }: {
@@ -1149,6 +1365,7 @@ export default function Jobs({ prefilledDate: initialDate }: { prefilledDate?: s
 
   const [activeTab, setActiveTab] = useState<JobStatus | "all">("all");
   const [selectedJob, setSelectedJob] = useState<Job | null>(null);
+  const [editJob, setEditJob] = useState<Job | null>(null);
   const [showAddJob, setShowAddJob] = useState(!!effectiveInitialDate);
   const [addJobDate, setAddJobDate] = useState<string | undefined>(effectiveInitialDate);
   const [search, setSearch] = useState("");
@@ -1164,6 +1381,10 @@ export default function Jobs({ prefilledDate: initialDate }: { prefilledDate?: s
   });
   const deleteMutation = trpc.jobs.delete.useMutation({
     onSuccess: () => { refetch(); toast.success("Job deleted"); },
+  });
+  const duplicateMutation = trpc.jobs.duplicate.useMutation({
+    onSuccess: () => { refetch(); toast.success("Job duplicated!"); },
+    onError: () => toast.error("Failed to duplicate job"),
   });
 
   const allJobs = (jobsData?.jobs ?? []) as Job[];
@@ -1342,6 +1563,15 @@ export default function Jobs({ prefilledDate: initialDate }: { prefilledDate?: s
           onClose={() => setSelectedJob(null)}
           onStatusChange={(id, status) => updateMutation.mutate({ id, status })}
           onDelete={(id) => deleteMutation.mutate({ id })}
+          onEdit={(job) => setEditJob(job)}
+          onDuplicate={(id) => duplicateMutation.mutate({ id })}
+        />
+      )}
+      {editJob && (
+        <EditJobSheet
+          job={editJob}
+          onClose={() => setEditJob(null)}
+          onSaved={() => refetch()}
         />
       )}
       {showAddJob && (

@@ -376,4 +376,142 @@ export const jobsRouter = router({
       await db.delete(jobs).where(and(eq(jobs.id, input.id), eq(jobs.userId, ctx.user.id)));
       return { success: true };
     }),
+
+  // Duplicate a job (clone with status reset to planned)
+  duplicate: protectedProcedure
+    .input(z.object({ id: z.number() }))
+    .mutation(async ({ ctx, input }) => {
+      const db = await getDb();
+      if (!db) throw new Error("Database unavailable");
+      const existing = await db.select().from(jobs)
+        .where(and(eq(jobs.id, input.id), eq(jobs.userId, ctx.user.id)))
+        .limit(1);
+      if (!existing[0]) throw new Error("Job not found");
+      const src = existing[0];
+      const insertResult = await db.insert(jobs).values({
+        userId: ctx.user.id,
+        status: "planned",
+        pickupPostcode: src.pickupPostcode,
+        dropoffPostcode: src.dropoffPostcode,
+        deliveryFee: src.deliveryFee,
+        fuelDeposit: src.fuelDeposit,
+        brokerFeePercent: src.brokerFeePercent,
+        brokerFeeFixed: src.brokerFeeFixed,
+        fuelReimbursed: src.fuelReimbursed,
+        estimatedDistanceMiles: src.estimatedDistanceMiles,
+        estimatedDurationMins: src.estimatedDurationMins,
+        estimatedFuelCost: src.estimatedFuelCost,
+        estimatedFuelPricePerLitre: src.estimatedFuelPricePerLitre,
+        estimatedWearTear: src.estimatedWearTear,
+        estimatedTimeValue: src.estimatedTimeValue,
+        estimatedNetProfit: src.estimatedNetProfit,
+        estimatedProfitPerHour: src.estimatedProfitPerHour,
+        estimatedProfitPerMile: src.estimatedProfitPerMile,
+        worthItScore: src.worthItScore,
+        routeData: src.routeData,
+        travelToJobCost: src.travelToJobCost,
+        travelToJobMode: src.travelToJobMode,
+        travelHomePostcode: src.travelHomePostcode,
+        travelHomeCost: src.travelHomeCost,
+        travelHomeMode: src.travelHomeMode,
+        vehicleMake: src.vehicleMake,
+        vehicleModel: src.vehicleModel,
+        vehicleReg: src.vehicleReg,
+        vehicleFuelType: src.vehicleFuelType,
+        vehicleColour: src.vehicleColour,
+        brokerName: src.brokerName,
+        jobReference: null, // don't copy reference
+        pickupAddress: src.pickupAddress,
+        dropoffAddress: src.dropoffAddress,
+        bookingImageUrl: null,
+        notes: src.notes,
+        customerName: src.customerName,
+        pickupContactName: src.pickupContactName,
+        pickupContactPhone: src.pickupContactPhone,
+        dropoffContactName: src.dropoffContactName,
+        dropoffContactPhone: src.dropoffContactPhone,
+        scannedDistanceMiles: src.scannedDistanceMiles,
+        scannedDurationMins: src.scannedDurationMins,
+      }).$returningId();
+      const insertedId = Array.isArray(insertResult) && insertResult.length > 0
+        ? Number((insertResult[0] as { id?: number | bigint })?.id ?? 0)
+        : 0;
+      return { success: true, jobId: insertedId };
+    }),
+
+  // Full edit of a job (re-calculates route if postcodes change)
+  edit: protectedProcedure
+    .input(jobInputSchema.extend({ id: z.number() }))
+    .mutation(async ({ ctx, input }) => {
+      const db = await getDb();
+      if (!db) throw new Error("Database unavailable");
+
+      const settings = await getUserSettings(ctx.user.id);
+      const routeInfo = await getRouteData(input.pickupPostcode, input.dropoffPostcode);
+      const distanceMiles = routeInfo?.distanceMiles ?? 50;
+      const durationMins = routeInfo?.durationMins ?? 60;
+
+      const vehicleMpg = settings?.vehicleMpg ?? 35;
+      const fuelPricePerLitre = 1.5;
+
+      const breakdown = calculateJobCost({
+        deliveryFee: input.deliveryFee,
+        fuelDeposit: input.fuelDeposit,
+        fuelReimbursed: input.fuelReimbursed,
+        distanceMiles,
+        durationMins,
+        fuelPricePerLitre,
+        vehicleMpg,
+        brokerFeePercent: input.brokerFeePercent,
+        brokerFeeFixed: input.brokerFeeFixed,
+        travelToJobCost: input.travelToJobCost,
+        travelHomeCost: input.travelHomeCost,
+      });
+
+      await db.update(jobs).set({
+        pickupPostcode: input.pickupPostcode.toUpperCase(),
+        dropoffPostcode: input.dropoffPostcode.toUpperCase(),
+        deliveryFee: input.deliveryFee,
+        fuelDeposit: input.fuelDeposit,
+        brokerFeePercent: input.brokerFeePercent,
+        brokerFeeFixed: input.brokerFeeFixed,
+        fuelReimbursed: input.fuelReimbursed,
+        estimatedDistanceMiles: distanceMiles,
+        estimatedDurationMins: durationMins,
+        estimatedFuelCost: breakdown.fuelCost,
+        estimatedFuelPricePerLitre: fuelPricePerLitre,
+        estimatedWearTear: breakdown.wearTear,
+        estimatedTimeValue: breakdown.timeValue,
+        estimatedNetProfit: breakdown.netProfit,
+        estimatedProfitPerHour: breakdown.profitPerHour,
+        estimatedProfitPerMile: breakdown.profitPerMile,
+        worthItScore: breakdown.worthItScore,
+        routeData: routeInfo?.routeData ?? null,
+        travelToJobCost: input.travelToJobCost,
+        travelToJobMode: input.travelToJobMode,
+        travelHomePostcode: input.travelHomePostcode ?? null,
+        travelHomeCost: input.travelHomeCost,
+        travelHomeMode: input.travelHomeMode,
+        vehicleMake: input.vehicleMake ?? null,
+        vehicleModel: input.vehicleModel ?? null,
+        vehicleReg: input.vehicleReg ?? null,
+        vehicleFuelType: input.vehicleFuelType ?? "unknown",
+        vehicleColour: input.vehicleColour ?? null,
+        brokerName: input.brokerName ?? null,
+        jobReference: input.jobReference ?? null,
+        pickupAddress: input.pickupAddress ?? null,
+        dropoffAddress: input.dropoffAddress ?? null,
+        bookingImageUrl: input.bookingImageUrl ?? null,
+        notes: input.notes ?? null,
+        scheduledPickupAt: input.scheduledPickupAt ? new Date(input.scheduledPickupAt) : undefined,
+        scheduledDropoffAt: input.scheduledDropoffAt ? new Date(input.scheduledDropoffAt) : undefined,
+        pickupContactName: input.pickupContactName ?? null,
+        pickupContactPhone: input.pickupContactPhone ?? null,
+        dropoffContactName: input.dropoffContactName ?? null,
+        dropoffContactPhone: input.dropoffContactPhone ?? null,
+        customerName: input.customerName ?? null,
+      }).where(and(eq(jobs.id, input.id), eq(jobs.userId, ctx.user.id)));
+
+      return { success: true, breakdown, distanceMiles, durationMins };
+    }),
 });

@@ -212,3 +212,21 @@
 - [x] UI: each transport leg shows all options (train/bus/taxi), tap to select with instant cost recalculation
 - [x] UI: summary includes home travel costs in total deductions
 - [x] UI: chain route is openable/collapsible per leg
+
+## Feature: Real Transit Directions in Chain Planner
+- [x] Server: tRPC procedure to query Google Maps Directions API (transit mode) for real bus/train/walk options
+- [x] Server: return step-by-step journey (walk to stop, bus number, train line, walk to destination) with real times and costs
+- [x] Server: time-match departures to job scheduled times (leave early enough to arrive at pickup on time)
+- [x] UI: display real multi-step journey steps in each transport leg card
+- [x] UI: show walk/bus/train icons per step with duration and cost
+- [x] UI: show total journey time and total cost per leg
+- [x] UI: step-by-step breakdown visible when transport option is selected (walk → bus → train detail)
+- [x] Server: improved UK transit cost estimation (tiered rail pricing, bus cap at £2, Tube/Tram rates)
+- [x] UI: scheduled pickup time shown on each Drive Job card in chain timeline
+
+## Feature: Edit Job & Duplicate
+- [x] Server: jobs.edit procedure (update all job fields)
+- [x] Server: jobs.duplicate procedure (clone a job)
+- [x] UI: Edit Job sheet (pre-filled form, broker auto-match)
+- [x] UI: Duplicate button in job detail sheet
+- [x] UI: Broker auto-match in AddJobSheet and EditJobSheet (auto-fill fee % from known brokers)
