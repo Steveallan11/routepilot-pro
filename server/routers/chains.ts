@@ -157,11 +157,20 @@ export const chainsRouter = router({
       let totalDurationMins = 0;
 
       for (const job of orderedJobs) {
-        totalEarnings += job.deliveryFee + job.fuelDeposit;
-        totalFuelCost += job.estimatedFuelCost ?? 0; // informational only — not deducted
-        totalBrokerFees += (job.deliveryFee * (job.brokerFeePercent ?? 0) / 100) + (job.brokerFeeFixed ?? 0);
-        totalDistanceMiles += job.estimatedDistanceMiles ?? 0;
-        totalDurationMins += job.estimatedDurationMins ?? 0;
+        // TiDB returns decimal columns as strings — coerce all to Number before arithmetic
+        const deliveryFee = Number(job.deliveryFee);
+        const fuelDeposit = Number(job.fuelDeposit ?? 0);
+        const estimatedFuelCost = Number(job.estimatedFuelCost ?? 0);
+        const brokerFeePercent = Number(job.brokerFeePercent ?? 0);
+        const brokerFeeFixed = Number(job.brokerFeeFixed ?? 0);
+        const estimatedDistanceMiles = Number(job.estimatedDistanceMiles ?? 0);
+        const estimatedDurationMins = Number(job.estimatedDurationMins ?? 0);
+
+        totalEarnings += deliveryFee + fuelDeposit;
+        totalFuelCost += estimatedFuelCost; // informational only — not deducted
+        totalBrokerFees += (deliveryFee * brokerFeePercent / 100) + brokerFeeFixed;
+        totalDistanceMiles += estimatedDistanceMiles;
+        totalDurationMins += estimatedDurationMins;
       }
 
       // Add reposition costs

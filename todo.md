@@ -200,3 +200,7 @@
 - [x] Fixed: TiDB returns decimal columns as strings; added Number() coercion in jobs.list/get/history queries
 - [x] Fixed: Added fmt() safe formatter in Jobs.tsx to prevent .toFixed() crashes on non-numbers
 - [x] Fixed: totalEarnings/totalProfit/totalMiles reduce calls now use Number() coercion
+
+## Bug Fix: Chain Planner Crash
+- [x] Fix numeric coercion in chains router (TiDB string decimals) — Number() wrap on all job fields before arithmetic
+- [x] Fix .toFixed() calls in ChainPlanner frontend with safe fmt() helper

@@ -13,6 +13,13 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
+// Safe number formatter — prevents crashes when TiDB returns decimals as strings
+function fmt(val: unknown, decimals = 2): string {
+  const n = Number(val);
+  if (!Number.isFinite(n)) return "0." + "0".repeat(decimals);
+  return n.toFixed(decimals);
+}
+
 const modeIcons: Record<string, React.ReactNode> = {
   train: <Train size={14} />,
   bus: <Bus size={14} />,
@@ -194,15 +201,15 @@ export default function ChainPlanner() {
                           <span>{job.dropoffPostcode}</span>
                         </div>
                         <div className="flex items-center gap-3 mt-0.5">
-                          <span className="text-xs text-muted-foreground">£{job.deliveryFee.toFixed(2)}</span>
+                          <span className="text-xs text-muted-foreground">£{fmt(job.deliveryFee)}</span>
                           {job.estimatedDistanceMiles && (
-                            <span className="text-xs text-muted-foreground">{job.estimatedDistanceMiles.toFixed(1)} mi</span>
+                            <span className="text-xs text-muted-foreground">{fmt(job.estimatedDistanceMiles, 1)} mi</span>
                           )}
                           {job.estimatedNetProfit != null && (
                             <span className={cn("text-xs font-medium",
                               job.estimatedNetProfit >= 0 ? "text-primary" : "text-destructive"
                             )}>
-                              {job.estimatedNetProfit >= 0 ? "+" : ""}£{job.estimatedNetProfit.toFixed(2)} profit
+                              {Number(job.estimatedNetProfit) >= 0 ? "+" : ""}£{fmt(job.estimatedNetProfit)} profit
                             </span>
                           )}
                         </div>
@@ -257,9 +264,9 @@ export default function ChainPlanner() {
                             <span>{job.dropoffPostcode}</span>
                           </div>
                           <div className="flex gap-3 mt-0.5">
-                            <span className="text-xs text-muted-foreground">£{job.deliveryFee.toFixed(2)}</span>
+                            <span className="text-xs text-muted-foreground">£{fmt(job.deliveryFee)}</span>
                             {job.estimatedDistanceMiles && (
-                              <span className="text-xs text-muted-foreground">{job.estimatedDistanceMiles.toFixed(1)} mi</span>
+                              <span className="text-xs text-muted-foreground">{fmt(job.estimatedDistanceMiles, 1)} mi</span>
                             )}
                           </div>
                         </div>
@@ -267,7 +274,7 @@ export default function ChainPlanner() {
                           <span className={cn("text-sm font-bold font-mono",
                             job.estimatedNetProfit >= 0 ? "text-primary" : "text-destructive"
                           )}>
-                            £{job.estimatedNetProfit.toFixed(2)}
+                            £{fmt(job.estimatedNetProfit)}
                           </span>
                         )}
                       </div>
@@ -297,7 +304,7 @@ export default function ChainPlanner() {
                                     </div>
                                     <div className="flex items-center gap-2 text-xs">
                                       <span className="text-muted-foreground">{Math.round(opt.durationMins)} min</span>
-                                      <span className="font-medium text-foreground">£{opt.cost.toFixed(2)}</span>
+                                      <span className="font-medium text-foreground">£{fmt(opt.cost)}</span>
                                     </div>
                                   </div>
                                 ))}
@@ -332,23 +339,23 @@ export default function ChainPlanner() {
                       "text-4xl font-bold font-mono profit-glow",
                       chainResult.summary.totalNetProfit >= 0 ? "text-primary" : "text-destructive"
                     )}>
-                      {chainResult.summary.totalNetProfit >= 0 ? "+" : ""}£{chainResult.summary.totalNetProfit.toFixed(2)}
+                      {Number(chainResult.summary.totalNetProfit) >= 0 ? "+" : ""}£{fmt(chainResult.summary.totalNetProfit)}
                     </p>
                   </div>
                   <div className="text-right">
                     <p className="text-xs text-muted-foreground">£/hr</p>
                     <p className="text-xl font-bold font-mono text-foreground">
-                      £{chainResult.summary.profitPerHour.toFixed(2)}
+                      £{fmt(chainResult.summary.profitPerHour)}
                     </p>
                   </div>
                 </div>
 
                 <div className="grid grid-cols-2 gap-2 mb-4">
                   {[
-                    { label: "Total Earnings", value: `£${chainResult.summary.totalEarnings.toFixed(2)}`, positive: true },
-                    { label: "Reposition Cost", value: `£${chainResult.summary.totalRepositionCost.toFixed(2)}`, positive: false },
-                    { label: "Total Distance", value: `${chainResult.summary.totalDistanceMiles.toFixed(1)} mi`, positive: null },
-                    { label: "Broker Fees", value: `£${chainResult.summary.totalBrokerFees.toFixed(2)}`, positive: false },
+                    { label: "Total Earnings", value: `£${fmt(chainResult.summary.totalEarnings)}`, positive: true },
+                    { label: "Reposition Cost", value: `£${fmt(chainResult.summary.totalRepositionCost)}`, positive: false },
+                    { label: "Total Distance", value: `${fmt(chainResult.summary.totalDistanceMiles, 1)} mi`, positive: null },
+                    { label: "Broker Fees", value: `£${fmt(chainResult.summary.totalBrokerFees)}`, positive: false },
                   ].map(item => (
                     <div key={item.label} className="bg-secondary rounded-lg p-2.5">
                       <p className="text-xs text-muted-foreground mb-0.5">{item.label}</p>
@@ -364,7 +371,7 @@ export default function ChainPlanner() {
                 {chainResult.summary.totalFuelCost > 0 && (
                   <div className="flex justify-between text-xs text-muted-foreground mb-3 px-0.5">
                     <span className="flex items-center gap-1">Fuel Cost <span className="text-blue-400">(claimed back)</span></span>
-                    <span className="font-mono">£{chainResult.summary.totalFuelCost.toFixed(2)}</span>
+                    <span className="font-mono">£{fmt(chainResult.summary.totalFuelCost)}</span>
                   </div>
                 )}
 
