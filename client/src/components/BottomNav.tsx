@@ -1,55 +1,81 @@
 import { useLocation, Link } from "wouter";
-import { Car, Navigation, History, LayoutDashboard, Trophy, LogIn, User, Bell, MoreHorizontal, Camera, Fuel, FileText, TrendingUp, Users, Crown } from "lucide-react";
+import {
+  LayoutDashboard, CalendarDays, Briefcase, Wrench, User, LogIn,
+  Camera, Fuel, FileText, TrendingUp, Users, Trophy, Zap, Crown,
+  Bell, Navigation, Link2, MoreHorizontal
+} from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { getLoginUrl } from "@/const";
 import { trpc } from "@/lib/trpc";
 import { useState } from "react";
 
+// ─── Primary 5-tab nav ────────────────────────────────────────────────────────
+
 const primaryNav = [
-  { path: "/calculator", icon: Car, label: "Calculator" },
-  { path: "/routes", icon: Navigation, label: "Routes" },
-  { path: "/dashboard", icon: LayoutDashboard, label: "Dashboard" },
-  { path: "/history", icon: History, label: "History" },
+  { path: "/dashboard", icon: LayoutDashboard, label: "Home" },
+  { path: "/calendar", icon: CalendarDays, label: "Calendar" },
+  { path: "/jobs", icon: Briefcase, label: "Jobs" },
+  { path: "/tools", icon: Wrench, label: "Tools" },
 ];
 
-const moreItems = [
-  { path: "/vehicle-condition", icon: Camera, label: "Condition Log" },
+// ─── Tools drawer items ───────────────────────────────────────────────────────
+
+const toolItems = [
+  { path: "/routes", icon: Navigation, label: "Route Finder" },
+  { path: "/chain", icon: Link2, label: "Chain Planner" },
   { path: "/fuel-finder", icon: Fuel, label: "Fuel Finder" },
+  { path: "/insights", icon: Zap, label: "AI Insights" },
+  { path: "/vehicle-condition", icon: Camera, label: "Condition Log" },
   { path: "/tax-export", icon: FileText, label: "Tax Export" },
   { path: "/brokers", icon: TrendingUp, label: "Brokers" },
   { path: "/lifts", icon: Users, label: "Lifts" },
+];
+
+// ─── Me drawer items ──────────────────────────────────────────────────────────
+
+const meItems = [
+  { path: "/notifications", icon: Bell, label: "Alerts" },
   { path: "/badges", icon: Trophy, label: "Badges" },
-  { path: "/insights", icon: Trophy, label: "AI Insights" },
   { path: "/subscription", icon: Crown, label: "Pro" },
+  { path: "/settings", icon: User, label: "Settings" },
 ];
 
 export default function BottomNav() {
   const [location] = useLocation();
   const { isAuthenticated, user } = useAuth();
-  const [showMore, setShowMore] = useState(false);
+  const [showTools, setShowTools] = useState(false);
+  const [showMe, setShowMe] = useState(false);
+
   const { data: unreadData } = trpc.notifications.unreadCount.useQuery(undefined, {
     enabled: isAuthenticated,
     refetchInterval: 30000,
   });
   const unreadCount = unreadData?.count ?? 0;
 
-  const isMoreActive = moreItems.some((item) => location === item.path || location.startsWith(item.path + "/"));
+  const isToolsActive = toolItems.some(i => location === i.path || location.startsWith(i.path + "/"));
+  const isMeActive = meItems.some(i => location === i.path || location.startsWith(i.path + "/"));
+
+  function closeAll() {
+    setShowTools(false);
+    setShowMe(false);
+  }
 
   return (
     <>
-      {/* More menu overlay */}
-      {showMore && (
-        <div className="fixed inset-0 z-40" onClick={() => setShowMore(false)}>
+      {/* Tools drawer */}
+      {showTools && (
+        <div className="fixed inset-0 z-40" onClick={closeAll}>
           <div
             className="absolute bottom-16 left-0 right-0 mx-4 bg-card border border-border rounded-2xl shadow-xl p-3"
             onClick={(e) => e.stopPropagation()}
           >
+            <p className="text-[10px] text-muted-foreground font-semibold uppercase tracking-wide px-1 mb-2">Tools</p>
             <div className="grid grid-cols-4 gap-1">
-              {moreItems.map(({ path, icon: Icon, label }) => {
+              {toolItems.map(({ path, icon: Icon, label }) => {
                 const isActive = location === path;
                 return (
-                  <Link key={path} href={path} onClick={() => setShowMore(false)}>
+                  <Link key={path} href={path} onClick={closeAll}>
                     <div className={cn(
                       "flex flex-col items-center justify-center gap-1 py-3 px-2 rounded-xl transition-colors",
                       isActive ? "bg-primary/10 text-primary" : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
@@ -65,13 +91,54 @@ export default function BottomNav() {
         </div>
       )}
 
-      <nav className="fixed bottom-0 left-0 right-0 z-50 bg-card border-t border-border"
-        style={{ paddingBottom: "env(safe-area-inset-bottom, 0px)" }}>
+      {/* Me drawer */}
+      {showMe && (
+        <div className="fixed inset-0 z-40" onClick={closeAll}>
+          <div
+            className="absolute bottom-16 right-0 left-0 mx-4 bg-card border border-border rounded-2xl shadow-xl p-3"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <p className="text-[10px] text-muted-foreground font-semibold uppercase tracking-wide px-1 mb-2">
+              {user?.name ? `Hi, ${user.name.split(" ")[0]}` : "Account"}
+            </p>
+            <div className="grid grid-cols-4 gap-1">
+              {meItems.map(({ path, icon: Icon, label }) => {
+                const isActive = location === path;
+                return (
+                  <Link key={path} href={path} onClick={closeAll}>
+                    <div className={cn(
+                      "flex flex-col items-center justify-center gap-1 py-3 px-2 rounded-xl transition-colors relative",
+                      isActive ? "bg-primary/10 text-primary" : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
+                    )}>
+                      <div className="relative">
+                        <Icon size={20} strokeWidth={isActive ? 2.5 : 1.8} />
+                        {path === "/notifications" && unreadCount > 0 && (
+                          <span className="absolute -top-1.5 -right-1.5 w-3.5 h-3.5 rounded-full bg-red-500 text-white text-[8px] flex items-center justify-center font-bold">
+                            {unreadCount > 9 ? "9+" : unreadCount}
+                          </span>
+                        )}
+                      </div>
+                      <span className="text-[10px] font-medium text-center leading-tight">{label}</span>
+                    </div>
+                  </Link>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Bottom nav bar */}
+      <nav
+        className="fixed bottom-0 left-0 right-0 z-50 bg-card border-t border-border"
+        style={{ paddingBottom: "env(safe-area-inset-bottom, 0px)" }}
+      >
         <div className="flex items-stretch max-w-lg mx-auto">
+          {/* Primary 4 tabs */}
           {primaryNav.map(({ path, icon: Icon, label }) => {
             const isActive = location === path || location.startsWith(path + "/");
             return (
-              <Link key={path} href={path} className="flex-1">
+              <Link key={path} href={path} className="flex-1" onClick={closeAll}>
                 <div className={cn(
                   "flex flex-col items-center justify-center gap-0.5 py-2.5 px-1 transition-colors relative",
                   isActive ? "text-primary" : "text-muted-foreground hover:text-foreground"
@@ -84,55 +151,44 @@ export default function BottomNav() {
             );
           })}
 
-          {/* More button */}
-          <button className="flex-1" onClick={() => setShowMore((v) => !v)}>
+          {/* Tools tab */}
+          <button className="flex-1" onClick={() => { setShowMe(false); setShowTools(v => !v); }}>
             <div className={cn(
               "flex flex-col items-center justify-center gap-0.5 py-2.5 px-1 transition-colors relative",
-              (showMore || isMoreActive) ? "text-primary" : "text-muted-foreground hover:text-foreground"
+              (showTools || isToolsActive) ? "text-primary" : "text-muted-foreground hover:text-foreground"
             )}>
-              <MoreHorizontal size={22} strokeWidth={(showMore || isMoreActive) ? 2.5 : 1.8} />
-              <span className={cn("text-[10px] font-medium", (showMore || isMoreActive) && "font-semibold")}>More</span>
-              {(showMore || isMoreActive) && <div className="absolute bottom-0 w-8 h-0.5 bg-primary rounded-t-full" />}
+              <Wrench size={22} strokeWidth={(showTools || isToolsActive) ? 2.5 : 1.8} />
+              <span className={cn("text-[10px] font-medium", (showTools || isToolsActive) && "font-semibold")}>Tools</span>
+              {(showTools || isToolsActive) && <div className="absolute bottom-0 w-8 h-0.5 bg-primary rounded-t-full" />}
             </div>
           </button>
 
-          {/* Notifications */}
-          <Link href="/notifications" className="flex-1">
-            <div className={cn(
-              "flex flex-col items-center justify-center gap-0.5 py-2.5 px-1 transition-colors relative",
-              location === "/notifications" ? "text-primary" : "text-muted-foreground hover:text-foreground"
-            )}>
-              <div className="relative">
-                <Bell size={22} strokeWidth={location === "/notifications" ? 2.5 : 1.8} />
-                {unreadCount > 0 && (
-                  <span className="absolute -top-1.5 -right-1.5 w-4 h-4 rounded-full bg-red-500 text-white text-[9px] flex items-center justify-center font-bold">
-                    {unreadCount > 9 ? "9+" : unreadCount}
-                  </span>
-                )}
-              </div>
-              <span className={cn("text-[10px] font-medium", location === "/notifications" && "font-semibold")}>Alerts</span>
-              {location === "/notifications" && <div className="absolute bottom-0 w-8 h-0.5 bg-primary rounded-t-full" />}
-            </div>
-          </Link>
-
-          {/* Sign-in / profile button */}
+          {/* Me tab */}
           {isAuthenticated ? (
-            <Link href="/settings" className="flex-1">
+            <button className="flex-1" onClick={() => { setShowTools(false); setShowMe(v => !v); }}>
               <div className={cn(
                 "flex flex-col items-center justify-center gap-0.5 py-2.5 px-1 transition-colors relative",
-                location.startsWith("/settings") ? "text-primary" : "text-muted-foreground hover:text-foreground"
+                (showMe || isMeActive) ? "text-primary" : "text-muted-foreground hover:text-foreground"
               )}>
-                <div className="w-5 h-5 rounded-full bg-primary/20 flex items-center justify-center">
-                  <User size={12} className="text-primary" />
+                <div className="relative">
+                  <div className={cn(
+                    "w-[22px] h-[22px] rounded-full flex items-center justify-center",
+                    (showMe || isMeActive) ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground"
+                  )}>
+                    <User size={13} strokeWidth={2} />
+                  </div>
+                  {unreadCount > 0 && (
+                    <span className="absolute -top-1 -right-1 w-3.5 h-3.5 rounded-full bg-red-500 text-white text-[8px] flex items-center justify-center font-bold">
+                      {unreadCount > 9 ? "9+" : unreadCount}
+                    </span>
+                  )}
                 </div>
-                <span className="text-[10px] font-medium truncate max-w-[40px]">
+                <span className={cn("text-[10px] font-medium truncate max-w-[40px]", (showMe || isMeActive) && "font-semibold")}>
                   {user?.name?.split(" ")[0] ?? "Me"}
                 </span>
-                {location.startsWith("/settings") && (
-                  <div className="absolute bottom-0 w-8 h-0.5 bg-primary rounded-t-full" />
-                )}
+                {(showMe || isMeActive) && <div className="absolute bottom-0 w-8 h-0.5 bg-primary rounded-t-full" />}
               </div>
-            </Link>
+            </button>
           ) : (
             <button onClick={() => { window.location.href = getLoginUrl(); }} className="flex-1">
               <div className="flex flex-col items-center justify-center gap-0.5 py-2.5 px-1 text-primary hover:text-primary/80 transition-colors">

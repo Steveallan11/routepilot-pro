@@ -157,3 +157,12 @@
 - [x] Calculator UI: update breakdown lines to reflect new logic
 - [x] Job history/job sheet: update breakdown display
 - [x] Update vitest tests for new calculation logic
+
+## Nav Redesign + Calendar + Jobs
+- [x] Propose and confirm new 5-tab nav structure with user
+- [x] Build Calendar page with day/week/month views and clickable job cards
+- [x] Build Jobs page with all statuses, full details, receipts, route, profit
+- [x] Integrate calculator into Jobs "Add Job" flow (remove standalone /calculator route from nav)
+- [x] Integrate route finder into Jobs detail / Add Job flow (remove standalone /routes from nav)
+- [x] Update BottomNav to new 5-tab structure (Home, Calendar, Jobs, Tools, Me)
+- [x] Update App.tsx routes

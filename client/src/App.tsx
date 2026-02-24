@@ -24,34 +24,54 @@ import Brokers from "./pages/Brokers";
 import Lifts from "./pages/Lifts";
 import Notifications from "./pages/Notifications";
 import Subscription from "./pages/Subscription";
+import Calendar from "./pages/Calendar";
+import Jobs from "./pages/Jobs";
 import { useLocation } from "wouter";
 
 function Router() {
   const [location] = useLocation();
-  const hideNav = location.startsWith("/share/") || location.startsWith("/shared-route/") || location === "/landing" || location.startsWith("/condition-report/");
+  const hideNav =
+    location.startsWith("/share/") ||
+    location.startsWith("/shared-route/") ||
+    location === "/landing" ||
+    location.startsWith("/condition-report/");
 
   return (
     <div className="min-h-dvh bg-background flex flex-col">
       <Switch>
-        <Route path="/" component={Landing} />
-        <Route path="/calculator" component={Home} />
-        <Route path="/chain" component={ChainPlanner} />
-        <Route path="/history" component={History} />
-        <Route path="/planner" component={DayPlanner} />
-        <Route path="/settings" component={Settings} />
-        <Route path="/insights" component={AIInsights} />
-        <Route path="/routes">{() => <RouteFinder />}</Route>
+        {/* Root → Dashboard (Home tab) */}
+        <Route path="/" component={Dashboard} />
+
+        {/* Primary 5-tab routes */}
         <Route path="/dashboard" component={Dashboard} />
-        <Route path="/badges" component={Badges} />
-        <Route path="/vehicle-condition" component={VehicleCondition} />
+        <Route path="/calendar" component={Calendar} />
+        <Route path="/jobs" component={Jobs} />
+
+        {/* Tools (accessible from Tools drawer) */}
+        <Route path="/routes">{() => <RouteFinder />}</Route>
+        <Route path="/chain" component={ChainPlanner} />
         <Route path="/fuel-finder" component={FuelFinder} />
+        <Route path="/insights" component={AIInsights} />
+        <Route path="/vehicle-condition" component={VehicleCondition} />
         <Route path="/tax-export" component={TaxExport} />
         <Route path="/brokers" component={Brokers} />
         <Route path="/lifts" component={Lifts} />
+
+        {/* Me (accessible from Me drawer) */}
         <Route path="/notifications" component={Notifications} />
+        <Route path="/badges" component={Badges} />
         <Route path="/subscription" component={Subscription} />
+        <Route path="/settings" component={Settings} />
+
+        {/* Legacy routes kept for backward compat */}
+        <Route path="/calculator" component={Home} />
+        <Route path="/history" component={History} />
+        <Route path="/planner" component={DayPlanner} />
+
+        {/* Shared / public routes */}
         <Route path="/share/:token" component={SharedChain} />
         <Route path="/shared-route/:token" component={SharedRoute} />
+
         <Route path="/404" component={NotFound} />
         <Route component={NotFound} />
       </Switch>
