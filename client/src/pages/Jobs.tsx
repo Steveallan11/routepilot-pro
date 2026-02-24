@@ -25,6 +25,14 @@ import { TravelPlanner } from "@/components/TravelPlanner";
 import { NotificationPermissionBanner } from "@/components/NotificationPermissionBanner";
 import { useNotifications } from "@/hooks/useNotifications";
 
+// ─── Safe number formatter ─────────────────────────────────────────────────
+// Prevents crashes when TiDB returns decimal columns as strings or null
+function fmt(val: unknown, decimals = 2): string {
+  const n = Number(val);
+  if (!Number.isFinite(n)) return "0." + "0".repeat(decimals);
+  return n.toFixed(decimals);
+}
+
 // ─── Travel Planner Section ──────────────────────────────────────────────────
 
 function TravelPlannerSection({ job }: { job: Job }) {
@@ -169,13 +177,13 @@ function JobDetailSheet({ job, onClose, onStatusChange, onDelete }: {
               <div>
                 <p className="text-xs text-muted-foreground mb-0.5">Net Profit</p>
                 <p className={cn("text-3xl font-bold font-mono", netProfit >= 0 ? "text-primary" : "text-destructive")}>
-                  {netProfit >= 0 ? "+" : ""}£{netProfit.toFixed(2)}
+                  {netProfit >= 0 ? "+" : ""}£{fmt(netProfit)}
                 </p>
               </div>
               <div className="text-right space-y-1">
                 {(job.estimatedDistanceMiles || job.actualDistanceMiles) && (
                   <p className="text-sm font-mono text-muted-foreground">
-                    {(job.actualDistanceMiles ?? job.estimatedDistanceMiles)?.toFixed(1)} mi
+                    {fmt(job.actualDistanceMiles ?? job.estimatedDistanceMiles, 1)} mi
                   </p>
                 )}
                 {(job.estimatedDurationMins || job.actualDurationMins) && (() => {
@@ -189,13 +197,13 @@ function JobDetailSheet({ job, onClose, onStatusChange, onDelete }: {
                 {job.estimatedProfitPerHour != null && (
                   <div className="bg-background/50 rounded-xl p-2 text-center">
                     <p className="text-[10px] text-muted-foreground">Per Hour</p>
-                    <p className="text-sm font-bold font-mono">£{job.estimatedProfitPerHour.toFixed(2)}</p>
+                    <p className="text-sm font-bold font-mono">£{fmt(job.estimatedProfitPerHour)}</p>
                   </div>
                 )}
                 {job.estimatedProfitPerMile != null && (
                   <div className="bg-background/50 rounded-xl p-2 text-center">
                     <p className="text-[10px] text-muted-foreground">Per Mile</p>
-                    <p className="text-sm font-bold font-mono">£{Number(job.estimatedProfitPerMile).toFixed(4)}</p>
+                    <p className="text-sm font-bold font-mono">£{fmt(job.estimatedProfitPerMile, 4)}</p>
                   </div>
                 )}
               </div>
@@ -210,12 +218,12 @@ function JobDetailSheet({ job, onClose, onStatusChange, onDelete }: {
             <div className="space-y-1.5 text-sm">
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Delivery Fee</span>
-                <span className="font-mono text-primary">+£{job.deliveryFee.toFixed(2)}</span>
+                <span className="font-mono text-primary">+£{fmt(job.deliveryFee)}</span>
               </div>
               {(job.fuelDeposit ?? 0) > 0 && (
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Fuel Deposit <span className="text-xs text-primary">(reimbursed)</span></span>
-                  <span className="font-mono text-primary">+£{(job.fuelDeposit ?? 0).toFixed(2)}</span>
+                  <span className="font-mono text-primary">+£{fmt(job.fuelDeposit ?? 0)}</span>
                 </div>
               )}
               {(job.estimatedFuelCost ?? 0) > 0 && (
@@ -223,13 +231,13 @@ function JobDetailSheet({ job, onClose, onStatusChange, onDelete }: {
                   <span className="text-muted-foreground flex items-center gap-1">
                     <Fuel size={11} /> Fuel Cost <span className="text-xs text-blue-400">(claimed back)</span>
                   </span>
-                  <span className="font-mono text-muted-foreground">£{(job.estimatedFuelCost ?? 0).toFixed(2)}</span>
+                  <span className="font-mono text-muted-foreground">£{fmt(job.estimatedFuelCost ?? 0)}</span>
                 </div>
               )}
               {brokerFee > 0 && (
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Broker Fee</span>
-                  <span className="font-mono">-£{brokerFee.toFixed(2)}</span>
+                  <span className="font-mono">-£{fmt(brokerFee)}</span>
                 </div>
               )}
               {(job.travelToJobCost ?? 0) > 0 && (
@@ -237,7 +245,7 @@ function JobDetailSheet({ job, onClose, onStatusChange, onDelete }: {
                   <span className="text-muted-foreground flex items-center gap-1">
                     <Train size={11} /> Travel to Job <span className="text-xs">({TRAVEL_MODE_LABELS[job.travelToJobMode ?? "none"]})</span>
                   </span>
-                  <span className="font-mono">-£{(job.travelToJobCost ?? 0).toFixed(2)}</span>
+                  <span className="font-mono">-£{fmt(job.travelToJobCost ?? 0)}</span>
                 </div>
               )}
               {(job.travelHomeCost ?? 0) > 0 && (
@@ -245,14 +253,14 @@ function JobDetailSheet({ job, onClose, onStatusChange, onDelete }: {
                   <span className="text-muted-foreground flex items-center gap-1">
                     <Train size={11} /> Travel Home <span className="text-xs">({TRAVEL_MODE_LABELS[job.travelHomeMode ?? "none"]})</span>
                   </span>
-                  <span className="font-mono">-£{(job.travelHomeCost ?? 0).toFixed(2)}</span>
+                  <span className="font-mono">-£{fmt(job.travelHomeCost ?? 0)}</span>
                 </div>
               )}
               <Separator className="my-1" />
               <div className="flex justify-between font-semibold">
                 <span>Net Profit</span>
                 <span className={cn("font-mono", netProfit >= 0 ? "text-primary" : "text-destructive")}>
-                  {netProfit >= 0 ? "+" : ""}£{netProfit.toFixed(2)}
+                  {netProfit >= 0 ? "+" : ""}£{fmt(netProfit)}
                 </span>
               </div>
             </div>
@@ -934,47 +942,47 @@ function AddJobSheet({ onClose, onSaved, prefilledDate }: { onClose: () => void;
                 <div>
                   <p className="text-xs text-muted-foreground">Net Profit</p>
                   <p className={cn("text-2xl font-bold font-mono", breakdown.netProfit >= 0 ? "text-primary" : "text-destructive")}>
-                    {breakdown.netProfit >= 0 ? "+" : ""}£{breakdown.netProfit.toFixed(2)}
+                    {breakdown.netProfit >= 0 ? "+" : ""}£{fmt(breakdown.netProfit)}
                   </p>
                 </div>
                 <div className="text-right text-xs text-muted-foreground space-y-0.5">
-                  <p>{result!.distanceMiles.toFixed(1)} mi</p>
+                  <p>{fmt(result!.distanceMiles, 1)} mi</p>
                   <p>{Math.floor(result!.durationMins / 60)}h {Math.round(result!.durationMins % 60)}m</p>
                 </div>
               </div>
               <div className="grid grid-cols-2 gap-2">
                 <div className="bg-background/50 rounded-xl p-2 text-center">
                   <p className="text-[10px] text-muted-foreground">Per Hour</p>
-                  <p className="text-sm font-bold font-mono">£{breakdown.profitPerHour.toFixed(2)}</p>
+                  <p className="text-sm font-bold font-mono">£{fmt(breakdown.profitPerHour)}</p>
                 </div>
                 <div className="bg-background/50 rounded-xl p-2 text-center">
                   <p className="text-[10px] text-muted-foreground">Per Mile</p>
-                  <p className="text-sm font-bold font-mono">£{breakdown.profitPerMile.toFixed(4)}</p>
+                  <p className="text-sm font-bold font-mono">£{fmt(breakdown.profitPerMile, 4)}</p>
                 </div>
               </div>
               <div className="space-y-1 text-xs">
                 <div className="flex justify-between text-muted-foreground">
-                  <span>Delivery Fee</span><span className="text-primary font-mono">+£{breakdown.deliveryFee.toFixed(2)}</span>
+                  <span>Delivery Fee</span><span className="text-primary font-mono">+£{fmt(breakdown.deliveryFee)}</span>
                 </div>
                 {breakdown.fuelCost > 0 && (
                   <div className="flex justify-between text-muted-foreground">
                     <span>Fuel <span className="text-blue-400">(claimed back)</span></span>
-                    <span className="font-mono">£{breakdown.fuelCost.toFixed(2)}</span>
+                    <span className="font-mono">£{fmt(breakdown.fuelCost)}</span>
                   </div>
                 )}
                 {breakdown.brokerFee > 0 && (
                   <div className="flex justify-between text-muted-foreground">
-                    <span>Broker Fee</span><span className="font-mono">-£{breakdown.brokerFee.toFixed(2)}</span>
+                    <span>Broker Fee</span><span className="font-mono">-£{fmt(breakdown.brokerFee)}</span>
                   </div>
                 )}
                 {breakdown.travelToJobCost > 0 && (
                   <div className="flex justify-between text-muted-foreground">
-                    <span>Travel to Job</span><span className="font-mono">-£{breakdown.travelToJobCost.toFixed(2)}</span>
+                    <span>Travel to Job</span><span className="font-mono">-£{fmt(breakdown.travelToJobCost)}</span>
                   </div>
                 )}
                 {breakdown.travelHomeCost > 0 && (
                   <div className="flex justify-between text-muted-foreground">
-                    <span>Travel Home</span><span className="font-mono">-£{breakdown.travelHomeCost.toFixed(2)}</span>
+                    <span>Travel Home</span><span className="font-mono">-£{fmt(breakdown.travelHomeCost)}</span>
                   </div>
                 )}
               </div>
@@ -1083,7 +1091,7 @@ function JobListItem({ job, onClick, onSwipeRight, onSwipeLeft }: {
             <div className="flex items-center gap-3 text-xs text-muted-foreground">
               {job.estimatedDistanceMiles && (
                 <span className="flex items-center gap-0.5">
-                  <Navigation size={10} /> {job.estimatedDistanceMiles.toFixed(1)} mi
+                  <Navigation size={10} /> {fmt(job.estimatedDistanceMiles, 1)} mi
                 </span>
               )}
               {job.estimatedDurationMins && (
@@ -1105,9 +1113,9 @@ function JobListItem({ job, onClick, onSwipeRight, onSwipeLeft }: {
             )}
           </div>
           <div className="text-right shrink-0 space-y-1">
-            <p className="text-lg font-bold font-mono text-primary">£{job.deliveryFee.toFixed(0)}</p>
+            <p className="text-lg font-bold font-mono text-primary">£{fmt(job.deliveryFee, 0)}</p>
             <p className={cn("text-xs font-mono", netProfit >= 0 ? "text-primary/70" : "text-destructive")}>
-              {netProfit >= 0 ? "+" : ""}£{netProfit.toFixed(0)} net
+              {netProfit >= 0 ? "+" : ""}£{fmt(netProfit, 0)} net
             </p>
             <WorthItBadge score={job.worthItScore} />
           </div>
@@ -1176,9 +1184,9 @@ export default function Jobs({ prefilledDate: initialDate }: { prefilledDate?: s
   });
 
   // Summary stats for current tab
-  const totalEarnings = filteredJobs.reduce((s, j) => s + j.deliveryFee, 0);
-  const totalProfit = filteredJobs.reduce((s, j) => s + (j.actualNetProfit ?? j.estimatedNetProfit ?? 0), 0);
-  const totalMiles = filteredJobs.reduce((s, j) => s + (j.actualDistanceMiles ?? j.estimatedDistanceMiles ?? 0), 0);
+  const totalEarnings = filteredJobs.reduce((s, j) => s + Number(j.deliveryFee), 0);
+  const totalProfit = filteredJobs.reduce((s, j) => s + Number(j.actualNetProfit ?? j.estimatedNetProfit ?? 0), 0);
+  const totalMiles = filteredJobs.reduce((s, j) => s + Number(j.actualDistanceMiles ?? j.estimatedDistanceMiles ?? 0), 0);
 
   if (!isAuthenticated) {
     return (
@@ -1267,19 +1275,19 @@ export default function Jobs({ prefilledDate: initialDate }: { prefilledDate?: s
         <div className="flex gap-3 px-4 py-3 border-b border-border/50 bg-secondary/30">
           <div className="flex-1 text-center">
             <p className="text-[10px] text-muted-foreground">Earnings</p>
-            <p className="text-sm font-bold font-mono text-primary">£{totalEarnings.toFixed(0)}</p>
+            <p className="text-sm font-bold font-mono text-primary">£{fmt(totalEarnings, 0)}</p>
           </div>
           <div className="w-px bg-border" />
           <div className="flex-1 text-center">
             <p className="text-[10px] text-muted-foreground">Net Profit</p>
             <p className={cn("text-sm font-bold font-mono", totalProfit >= 0 ? "text-primary" : "text-destructive")}>
-              {totalProfit >= 0 ? "+" : ""}£{totalProfit.toFixed(0)}
+              {totalProfit >= 0 ? "+" : ""}£{fmt(totalProfit, 0)}
             </p>
           </div>
           <div className="w-px bg-border" />
           <div className="flex-1 text-center">
             <p className="text-[10px] text-muted-foreground">Miles</p>
-            <p className="text-sm font-bold font-mono">{totalMiles.toFixed(0)}</p>
+            <p className="text-sm font-bold font-mono">{fmt(totalMiles, 0)}</p>
           </div>
           <div className="w-px bg-border" />
           <div className="flex-1 text-center">

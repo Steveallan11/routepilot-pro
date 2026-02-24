@@ -195,3 +195,8 @@
 
 ## Fix: Duplicate Tools Icon in BottomNav
 - [x] Remove duplicate/blank Tools tab from bottom navigation
+
+## Bug Fix: Persistent Create Job Crash
+- [x] Fixed: TiDB returns decimal columns as strings; added Number() coercion in jobs.list/get/history queries
+- [x] Fixed: Added fmt() safe formatter in Jobs.tsx to prevent .toFixed() crashes on non-numbers
+- [x] Fixed: totalEarnings/totalProfit/totalMiles reduce calls now use Number() coercion

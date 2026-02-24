@@ -143,8 +143,9 @@ export const jobsRouter = router({
 
       const settings = await getUserSettings(ctx.user.id);
       const routeInfo = await getRouteData(input.pickupPostcode, input.dropoffPostcode);
-      const distanceMiles = routeInfo?.distanceMiles ?? 0;
-      const durationMins = routeInfo?.durationMins ?? 0;
+      // Use safe fallbacks to avoid division-by-zero in profitPerMile/profitPerHour
+      const distanceMiles = routeInfo?.distanceMiles ?? 50;
+      const durationMins = routeInfo?.durationMins ?? 60;
 
       const vehicleMpg = settings?.vehicleMpg ?? 35;
       const fuelPricePerLitre = 1.5;
@@ -255,7 +256,33 @@ export const jobsRouter = router({
         .limit(input.limit)
         .offset(input.offset);
 
-      return { jobs: result, total: result.length };
+      // TiDB/MySQL decimal columns come back as strings from the driver.
+      // Coerce all numeric fields to actual numbers before sending to the client.
+      const normalised = result.map(j => ({
+        ...j,
+        deliveryFee: Number(j.deliveryFee),
+        fuelDeposit: Number(j.fuelDeposit),
+        brokerFeePercent: Number(j.brokerFeePercent),
+        brokerFeeFixed: Number(j.brokerFeeFixed),
+        estimatedDistanceMiles: j.estimatedDistanceMiles != null ? Number(j.estimatedDistanceMiles) : null,
+        estimatedDurationMins: j.estimatedDurationMins != null ? Number(j.estimatedDurationMins) : null,
+        estimatedFuelCost: j.estimatedFuelCost != null ? Number(j.estimatedFuelCost) : null,
+        estimatedFuelPricePerLitre: j.estimatedFuelPricePerLitre != null ? Number(j.estimatedFuelPricePerLitre) : null,
+        estimatedWearTear: j.estimatedWearTear != null ? Number(j.estimatedWearTear) : null,
+        estimatedTimeValue: j.estimatedTimeValue != null ? Number(j.estimatedTimeValue) : null,
+        estimatedNetProfit: j.estimatedNetProfit != null ? Number(j.estimatedNetProfit) : null,
+        estimatedProfitPerHour: j.estimatedProfitPerHour != null ? Number(j.estimatedProfitPerHour) : null,
+        estimatedProfitPerMile: j.estimatedProfitPerMile != null ? Number(j.estimatedProfitPerMile) : null,
+        actualDistanceMiles: j.actualDistanceMiles != null ? Number(j.actualDistanceMiles) : null,
+        actualDurationMins: j.actualDurationMins != null ? Number(j.actualDurationMins) : null,
+        actualFuelCost: j.actualFuelCost != null ? Number(j.actualFuelCost) : null,
+        actualNetProfit: j.actualNetProfit != null ? Number(j.actualNetProfit) : null,
+        travelToJobCost: j.travelToJobCost != null ? Number(j.travelToJobCost) : null,
+        travelHomeCost: j.travelHomeCost != null ? Number(j.travelHomeCost) : null,
+        scannedDistanceMiles: j.scannedDistanceMiles != null ? Number(j.scannedDistanceMiles) : null,
+        scannedDurationMins: j.scannedDurationMins != null ? Number(j.scannedDurationMins) : null,
+      }));
+      return { jobs: normalised, total: normalised.length };
     }),
 
   // Get single job
@@ -267,7 +294,25 @@ export const jobsRouter = router({
       const result = await db.select().from(jobs)
         .where(and(eq(jobs.id, input.id), eq(jobs.userId, ctx.user.id)))
         .limit(1);
-      return result[0] ?? null;
+      if (!result[0]) return null;
+      const j = result[0];
+      return {
+        ...j,
+        deliveryFee: Number(j.deliveryFee),
+        fuelDeposit: Number(j.fuelDeposit),
+        brokerFeePercent: Number(j.brokerFeePercent),
+        brokerFeeFixed: Number(j.brokerFeeFixed),
+        estimatedDistanceMiles: j.estimatedDistanceMiles != null ? Number(j.estimatedDistanceMiles) : null,
+        estimatedDurationMins: j.estimatedDurationMins != null ? Number(j.estimatedDurationMins) : null,
+        estimatedNetProfit: j.estimatedNetProfit != null ? Number(j.estimatedNetProfit) : null,
+        estimatedProfitPerHour: j.estimatedProfitPerHour != null ? Number(j.estimatedProfitPerHour) : null,
+        estimatedProfitPerMile: j.estimatedProfitPerMile != null ? Number(j.estimatedProfitPerMile) : null,
+        actualDistanceMiles: j.actualDistanceMiles != null ? Number(j.actualDistanceMiles) : null,
+        actualDurationMins: j.actualDurationMins != null ? Number(j.actualDurationMins) : null,
+        actualNetProfit: j.actualNetProfit != null ? Number(j.actualNetProfit) : null,
+        travelToJobCost: j.travelToJobCost != null ? Number(j.travelToJobCost) : null,
+        travelHomeCost: j.travelHomeCost != null ? Number(j.travelHomeCost) : null,
+      };
     }),
 
   // Update job status / actuals / metadata

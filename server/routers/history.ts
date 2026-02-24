@@ -88,8 +88,8 @@ export const historyRouter = router({
         if (!job.completedAt) continue;
         const dateKey = job.completedAt.toISOString().split("T")[0]!;
         if (!byDate[dateKey]) byDate[dateKey] = { earnings: 0, profit: 0, jobs: 0 };
-        byDate[dateKey]!.earnings += job.deliveryFee;
-        byDate[dateKey]!.profit += job.actualNetProfit ?? job.estimatedNetProfit ?? 0;
+        byDate[dateKey]!.earnings += Number(job.deliveryFee);
+        byDate[dateKey]!.profit += Number(job.actualNetProfit ?? job.estimatedNetProfit ?? 0);
         byDate[dateKey]!.jobs += 1;
       }
 
