@@ -11,13 +11,14 @@ import DayPlanner from "./pages/DayPlanner";
 import Settings from "./pages/Settings";
 import AIInsights from "./pages/AIInsights";
 import SharedChain from "./pages/SharedChain";
+import SharedRoute from "./pages/SharedRoute";
 import RouteFinder from "./pages/RouteFinder";
 import BottomNav from "./components/BottomNav";
 import { useLocation } from "wouter";
 
 function Router() {
   const [location] = useLocation();
-  const hideNav = location.startsWith("/share/");
+  const hideNav = location.startsWith("/share/") || location.startsWith("/shared-route/");
 
   return (
     <div className="min-h-dvh bg-background flex flex-col">
@@ -30,6 +31,7 @@ function Router() {
         <Route path="/insights" component={AIInsights} />
         <Route path="/routes">{() => <RouteFinder />}</Route>
         <Route path="/share/:token" component={SharedChain} />
+        <Route path="/shared-route/:token" component={SharedRoute} />
         <Route path="/404" component={NotFound} />
         <Route component={NotFound} />
       </Switch>

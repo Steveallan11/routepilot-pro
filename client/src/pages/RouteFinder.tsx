@@ -10,8 +10,9 @@ import { useAuth } from "@/_core/hooks/useAuth";
 import {
   Train, Bus, Car, PersonStanding, Zap, Clock,
   ChevronRight, MapPin, Loader2, CheckCircle2,
-  Navigation, TrendingDown, Timer, Scale, Star, StarOff,
-  Trash2, CalendarClock, ChevronDown, ChevronUp
+  Navigation, TrendingDown, Timer, Scale, Star,
+  Trash2, CalendarClock, ChevronDown, ChevronUp,
+  Share2, History, Home
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { format, addMinutes } from "date-fns";
@@ -207,6 +208,8 @@ export default function RouteFinder({ initialFrom = "", initialTo = "", onUseRou
   const [savingFav, setSavingFav] = useState(false);
   const [favName, setFavName] = useState("");
   const [showSaveFav, setShowSaveFav] = useState(false);
+  const [showHistory, setShowHistory] = useState(false);
+  const [sharingId, setSharingId] = useState<number | null>(null);
 
   const mapRef = useRef<google.maps.Map | null>(null);
   const polylinesRef = useRef<google.maps.Polyline[]>([]);
@@ -223,6 +226,42 @@ export default function RouteFinder({ initialFrom = "", initialTo = "", onUseRou
   const deleteFavMutation = trpc.routes.deleteFavourite.useMutation({
     onSuccess: () => refetchFavs(),
   });
+
+  // tRPC: history
+  const { data: historyItems, refetch: refetchHistory } = trpc.routes.listHistory.useQuery(
+    { limit: 20 },
+    { enabled: isAuthenticated }
+  );
+  const saveToHistoryMutation = trpc.routes.saveToHistory.useMutation({
+    onSuccess: () => refetchHistory(),
+  });
+  const deleteHistoryMutation = trpc.routes.deleteHistory.useMutation({
+    onSuccess: () => refetchHistory(),
+  });
+
+  // tRPC: share
+  const createShareMutation = trpc.routes.createShare.useMutation({
+    onSuccess: (data) => {
+      const url = `${window.location.origin}/shared-route/${data.token}`;
+      navigator.clipboard.writeText(url).then(() => {
+        toast.success("Share link copied to clipboard! Valid for 7 days.");
+      }).catch(() => {
+        toast.info(`Share link: ${url}`);
+      });
+      setSharingId(null);
+    },
+    onError: () => { toast.error("Failed to create share link"); setSharingId(null); },
+  });
+
+  // tRPC: settings (for home postcode)
+  const { data: settings } = trpc.settings.get.useQuery(undefined, { enabled: isAuthenticated });
+
+  // Auto-fill From with home postcode if empty
+  useEffect(() => {
+    if (settings?.homePostcode && !from) {
+      setFrom(settings.homePostcode.toUpperCase());
+    }
+  }, [settings?.homePostcode]);
 
   // Read URL params on mount
   useEffect(() => {
@@ -422,6 +461,37 @@ export default function RouteFinder({ initialFrom = "", initialTo = "", onUseRou
       setSelectedRoute(balanced);
       drawRoute(balanced);
       setShowSaveFav(true);
+
+      // Auto-save to history
+      if (isAuthenticated) {
+        const legs = balanced.legs.map(l => ({
+          mode: l.mode,
+          summary: l.lineName ?? l.mode,
+          durationSecs: l.durationSecs,
+          distanceMetres: l.distanceMetres,
+          departureTime: l.departureTime,
+          arrivalTime: l.arrivalTime,
+          lineName: l.lineName,
+          departureStop: l.departureStop,
+          arrivalStop: l.arrivalStop,
+          numStops: l.numStops,
+          polyline: l.polyline,
+          estimatedFare: l.estimatedFare,
+        }));
+        saveToHistoryMutation.mutate({
+          fromPostcode: from,
+          toPostcode: to,
+          label: balanced.label,
+          summary: balanced.summary,
+          totalDurationSecs: balanced.totalDurationSecs,
+          totalDistanceMetres: balanced.totalDistanceMetres,
+          estimatedCost: balanced.estimatedCost,
+          dominantMode: balanced.legs.find(l => l.mode === "TRANSIT")?.transitMode ?? "DRIVING",
+          departureTime: balanced.departureTime,
+          arrivalTime: balanced.arrivalTime,
+          legs,
+        });
+      }
 
     } catch (err) {
       console.error(err);
@@ -658,6 +728,80 @@ export default function RouteFinder({ initialFrom = "", initialTo = "", onUseRou
           </Card>
         )}
 
+        {/* Route History */}
+        {isAuthenticated && (historyItems?.length ?? 0) > 0 && (
+          <Card className="bg-card border-border">
+            <div
+              className="flex items-center justify-between px-4 py-2.5 cursor-pointer"
+              onClick={() => setShowHistory(s => !s)}
+            >
+              <div className="flex items-center gap-2 text-sm font-medium text-foreground">
+                <History size={14} className="text-blue-400" />
+                Route History ({historyItems!.length})
+              </div>
+              {showHistory ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+            </div>
+            {showHistory && (
+              <div className="px-4 pb-3 space-y-2 border-t border-border pt-2">
+                {historyItems!.map((item: any) => (
+                  <div key={item.id} className="flex items-center gap-2">
+                    <button
+                      className="flex-1 text-left text-sm text-foreground bg-input rounded-lg px-3 py-2 hover:bg-muted transition-colors"
+                      onClick={() => {
+                        setFrom(item.fromPostcode);
+                        setTo(item.toPostcode);
+                        setShowHistory(false);
+                        toast.info(`Loaded: ${item.fromPostcode} → ${item.toPostcode}`);
+                      }}
+                    >
+                      <div className="flex items-center justify-between">
+                        <span className="font-medium">{item.fromPostcode} → {item.toPostcode}</span>
+                        {item.estimatedCost && (
+                          <span className="text-green-400 font-semibold text-xs">~£{Number(item.estimatedCost).toFixed(2)}</span>
+                        )}
+                      </div>
+                      <div className="text-xs text-muted-foreground mt-0.5">
+                        {item.dominantMode && <span className="capitalize mr-2">{item.dominantMode.toLowerCase()}</span>}
+                        {item.totalDurationSecs && <span>{formatDuration(item.totalDurationSecs)}</span>}
+                        <span className="ml-2">{new Date(item.usedAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}</span>
+                      </div>
+                    </button>
+                    <button
+                      className="p-2 text-muted-foreground hover:text-blue-400 transition-colors"
+                      title="Share this route"
+                      onClick={() => {
+                        if (!item.legsSnapshot) { toast.error("No route data to share"); return; }
+                        setSharingId(item.id);
+                        createShareMutation.mutate({
+                          fromPostcode: item.fromPostcode,
+                          toPostcode: item.toPostcode,
+                          label: item.label ?? "balanced",
+                          summary: item.summary ?? "",
+                          totalDurationSecs: item.totalDurationSecs ?? undefined,
+                          totalDistanceMetres: item.totalDistanceMetres ?? undefined,
+                          estimatedCost: item.estimatedCost ? Number(item.estimatedCost) : undefined,
+                          dominantMode: item.dominantMode ?? undefined,
+                          departureTime: item.departureTime ?? undefined,
+                          arrivalTime: item.arrivalTime ?? undefined,
+                          legs: (item.legsSnapshot as any[]) ?? [],
+                        });
+                      }}
+                    >
+                      {sharingId === item.id ? <Loader2 size={14} className="animate-spin" /> : <Share2 size={14} />}
+                    </button>
+                    <button
+                      className="p-2 text-muted-foreground hover:text-destructive transition-colors"
+                      onClick={() => deleteHistoryMutation.mutate({ id: item.id })}
+                    >
+                      <Trash2 size={14} />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </Card>
+        )}
+
         {/* Route options */}
         {routes.length > 0 && (
           <div className="space-y-3">
@@ -806,21 +950,66 @@ export default function RouteFinder({ initialFrom = "", initialTo = "", onUseRou
                       </div>
                     )}
 
-                    {isSelected && onUseRoute && (
-                      <Button
-                        size="sm"
-                        className="w-full mt-1 bg-primary text-primary-foreground font-semibold"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          const dominantMode = route.legs.find(l => l.mode === "TRANSIT")?.transitMode ?? "DRIVING";
-                          onUseRoute(route.estimatedCost, dominantMode.toLowerCase(), route.summary);
-                          toast.success(`Route cost £${route.estimatedCost.toFixed(2)} added to travel expenses`);
-                        }}
-                      >
-                        <CheckCircle2 size={14} className="mr-2" />
-                        Use This Route — £{route.estimatedCost.toFixed(2)}
-                      </Button>
-                    )}
+                    <div className="flex gap-2 mt-1">
+                      {isSelected && onUseRoute && (
+                        <Button
+                          size="sm"
+                          className="flex-1 bg-primary text-primary-foreground font-semibold"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            const dominantMode = route.legs.find(l => l.mode === "TRANSIT")?.transitMode ?? "DRIVING";
+                            onUseRoute(route.estimatedCost, dominantMode.toLowerCase(), route.summary);
+                            toast.success(`Route cost £${route.estimatedCost.toFixed(2)} added to travel expenses`);
+                          }}
+                        >
+                          <CheckCircle2 size={14} className="mr-2" />
+                          Use This Route — £{route.estimatedCost.toFixed(2)}
+                        </Button>
+                      )}
+                      {isSelected && isAuthenticated && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="border-border text-muted-foreground hover:text-foreground"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setSharingId(0);
+                            const legs = route.legs.map(l => ({
+                              mode: l.mode,
+                              summary: l.lineName ?? l.mode,
+                              durationSecs: l.durationSecs,
+                              distanceMetres: l.distanceMetres,
+                              departureTime: l.departureTime,
+                              arrivalTime: l.arrivalTime,
+                              lineName: l.lineName,
+                              departureStop: l.departureStop,
+                              arrivalStop: l.arrivalStop,
+                              numStops: l.numStops,
+                              polyline: l.polyline,
+                              estimatedFare: l.estimatedFare,
+                            }));
+                            createShareMutation.mutate({
+                              fromPostcode: from,
+                              toPostcode: to,
+                              label: route.label,
+                              summary: route.summary,
+                              totalDurationSecs: route.totalDurationSecs,
+                              totalDistanceMetres: route.totalDistanceMetres,
+                              estimatedCost: route.estimatedCost,
+                              dominantMode: route.legs.find(l => l.mode === "TRANSIT")?.transitMode ?? "DRIVING",
+                              departureTime: route.departureTime,
+                              arrivalTime: route.arrivalTime,
+                              legs,
+                            });
+                          }}
+                          title="Share this route"
+                        >
+                          {sharingId === 0 && createShareMutation.isPending
+                            ? <Loader2 size={14} className="animate-spin" />
+                            : <Share2 size={14} />}
+                        </Button>
+                      )}
+                    </div>
                   </CardContent>
                 </Card>
               );

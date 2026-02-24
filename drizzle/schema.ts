@@ -209,3 +209,28 @@ export const favouriteRoutes = mysqlTable("favourite_routes", {
 
 export type FavouriteRoute = typeof favouriteRoutes.$inferSelect;
 export type InsertFavouriteRoute = typeof favouriteRoutes.$inferInsert;
+
+// ─── Route History ────────────────────────────────────────────────────────────
+
+export const routeHistory = mysqlTable("route_history", {
+  id: int("id").autoincrement().primaryKey(),
+  userId: int("userId").notNull(),
+  fromPostcode: varchar("fromPostcode", { length: 10 }).notNull(),
+  toPostcode: varchar("toPostcode", { length: 10 }).notNull(),
+  label: mysqlEnum("label", ["fastest", "cheapest", "balanced"]).default("balanced").notNull(),
+  summary: varchar("summary", { length: 200 }),
+  totalDurationSecs: int("totalDurationSecs"),
+  totalDistanceMetres: int("totalDistanceMetres"),
+  estimatedCost: decimal("estimatedCost", { precision: 8, scale: 2 }).$type<number>(),
+  dominantMode: varchar("dominantMode", { length: 20 }),
+  departureTime: varchar("departureTime", { length: 30 }),
+  arrivalTime: varchar("arrivalTime", { length: 30 }),
+  legsSnapshot: json("legsSnapshot"),
+  shareToken: varchar("shareToken", { length: 64 }),
+  shareExpiresAt: timestamp("shareExpiresAt"),
+  usedAt: timestamp("usedAt").defaultNow().notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type RouteHistory = typeof routeHistory.$inferSelect;
+export type InsertRouteHistory = typeof routeHistory.$inferInsert;

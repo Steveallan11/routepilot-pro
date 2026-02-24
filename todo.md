@@ -97,19 +97,27 @@
 - [x] Frontend: Add route finder button in Travel Expenses section for quick access
 
 ## Feature: Departure Time Picker
-- [ ] Add date/time picker to Route Finder page
-- [ ] Pass departure time to Google Maps Directions API transit request
-- [ ] Show "departing at X" label on route cards
+- [x] Add date/time picker to Route Finder page
+- [x] Pass departure time to Google Maps Directions API transit request
+- [x] Show "departing at X" label on route cards
 
 ## Feature: Saved Favourite Routes
-- [ ] DB: favouriteRoutes table (userId, name, fromPostcode, toPostcode, defaultMode)
-- [ ] Server: favouriteRoutes router (list, save, delete)
-- [ ] Frontend: "Save as Favourite" button on Route Finder after search
-- [ ] Frontend: Favourites list on Route Finder — tap to pre-fill postcodes and search
-- [ ] Frontend: Quick-load favourite in Travel Expenses section
+- [x] DB: favouriteRoutes table (userId, name, fromPostcode, toPostcode, defaultMode)
+- [x] Server: favouriteRoutes router (list, save, delete)
+- [x] Frontend: "Save as Favourite" button on Route Finder after search
+- [x] Frontend: Favourites list on Route Finder — tap to pre-fill postcodes and search
+- [x] Frontend: Quick-load favourite in Travel Expenses section
 
 ## Feature: Real-Time UK Train Fares
-- [ ] Research best available UK train fare API (National Rail, TransportAPI, Trainline)
-- [ ] Server: fetch live fare data and attach to transit legs
-- [ ] Frontend: Show actual fare on train legs instead of estimate
-- [ ] Frontend: Show fare breakdown per leg in route card detail view
+- [x] Research best available UK train fare API — no public API; using ATOC distance-band model
+- [x] Server: ATOC Anytime Single distance-band fare estimation per transit leg
+- [x] Frontend: Show estimated fare on train legs with ~£ prefix
+- [x] Frontend: Show fare breakdown per leg in route card detail view
+
+## Feature: Route Finder Enhancements (Round 2)
+- [x] Home postcode auto-fill: pre-fill From field from user's Settings homePostcode
+- [x] Route history: DB table to log every route search used
+- [x] Route history: show past routes in Routes tab with date, postcodes, cost, mode
+- [x] Shareable route links: generate share token, store route snapshot in DB
+- [x] Shareable route links: public page /shared-route/:token with map, legs, and cost
+- [x] Shareable route links: share button on route result cards

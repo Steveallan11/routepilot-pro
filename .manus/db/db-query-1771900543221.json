@@ -1,0 +1,9 @@
+{
+  "query": "CREATE TABLE IF NOT EXISTS `route_history` (\n  `id` int NOT NULL AUTO_INCREMENT,\n  `userId` int NOT NULL,\n  `fromPostcode` varchar(10) NOT NULL,\n  `toPostcode` varchar(10) NOT NULL,\n  `label` enum('fastest','cheapest','balanced') NOT NULL DEFAULT 'balanced',\n  `summary` varchar(200),\n  `totalDurationSecs` int,\n  `totalDistanceMetres` int,\n  `estimatedCost` decimal(8,2),\n  `dominantMode` varchar(20),\n  `departureTime` varchar(30),\n  `arrivalTime` varchar(30),\n  `legsSnapshot` json,\n  `shareToken` varchar(64),\n  `shareExpiresAt` timestamp NULL,\n  `usedAt` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,\n  `createdAt` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,\n  PRIMARY KEY (`id`),\n  KEY `idx_route_history_userId` (`userId`),\n  KEY `idx_route_history_shareToken` (`shareToken`)\n);",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway02.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 29dmg1z8s7MGkda.cd2f01f00c99 --database 6VTDyDwMUZs22XSbYJviE3 --execute CREATE TABLE IF NOT EXISTS `route_history` (\n  `id` int NOT NULL AUTO_INCREMENT,\n  `userId` int NOT NULL,\n  `fromPostcode` varchar(10) NOT NULL,\n  `toPostcode` varchar(10) NOT NULL,\n  `label` enum('fastest','cheapest','balanced') NOT NULL DEFAULT 'balanced',\n  `summary` varchar(200),\n  `totalDurationSecs` int,\n  `totalDistanceMetres` int,\n  `estimatedCost` decimal(8,2),\n  `dominantMode` varchar(20),\n  `departureTime` varchar(30),\n  `arrivalTime` varchar(30),\n  `legsSnapshot` json,\n  `shareToken` varchar(64),\n  `shareExpiresAt` timestamp NULL,\n  `usedAt` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,\n  `createdAt` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,\n  PRIMARY KEY (`id`),\n  KEY `idx_route_history_userId` (`userId`),\n  KEY `idx_route_history_shareToken` (`shareToken`)\n);",
+  "rows": [],
+  "messages": [],
+  "stdout": "",
+  "stderr": "",
+  "execution_time_ms": 280
+}
