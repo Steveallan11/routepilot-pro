@@ -204,3 +204,11 @@
 ## Bug Fix: Chain Planner Crash
 - [x] Fix numeric coercion in chains router (TiDB string decimals) — Number() wrap on all job fields before arithmetic
 - [x] Fix .toFixed() calls in ChainPlanner frontend with safe fmt() helper
+
+## Feature: Chain Planner Full Door-to-Door Timeline
+- [x] Server: chains.plan includes home→pickup1 and lastDropoff→home transport legs
+- [x] Server: all 5 leg types returned (homeToPickup, driveLeg, reposition, driveLeg, homeReturn)
+- [x] UI: full expandable timeline with drive legs and transport legs interleaved
+- [x] UI: each transport leg shows all options (train/bus/taxi), tap to select with instant cost recalculation
+- [x] UI: summary includes home travel costs in total deductions
+- [x] UI: chain route is openable/collapsible per leg

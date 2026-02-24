@@ -3,7 +3,6 @@ import { protectedProcedure, router } from "../_core/trpc";
 import { getDb } from "../db";
 import { jobChains, chainJobs, jobs, userSettings } from "../../drizzle/schema";
 import { eq, and, desc, inArray } from "drizzle-orm";
-import { makeRequest } from "../_core/map";
 import { calculateJobCost } from "../../shared/routepilot-types";
 import axios from "axios";
 import { nanoid } from "nanoid";
@@ -13,20 +12,17 @@ const TRANSPORT_APP_ID = process.env.TRANSPORT_APP_ID ?? "";
 const TRANSPORT_APP_KEY = process.env.TRANSPORT_APP_KEY ?? "";
 
 async function getTransportRoute(fromPostcode: string, toPostcode: string) {
-  // If no TransportAPI credentials, return mock data
   if (!TRANSPORT_APP_ID || !TRANSPORT_APP_KEY) {
     return getMockTransportRoute(fromPostcode, toPostcode);
   }
-
   try {
-    const response = await axios.get(`${TRANSPORT_API_BASE}/public/journey/from/postcode:${fromPostcode}/to/postcode:${toPostcode}.json`, {
-      params: {
-        app_id: TRANSPORT_APP_ID,
-        app_key: TRANSPORT_APP_KEY,
-        modes_of_transport: "train,bus,tram",
-      },
-      timeout: 10000,
-    });
+    const response = await axios.get(
+      `${TRANSPORT_API_BASE}/public/journey/from/postcode:${fromPostcode}/to/postcode:${toPostcode}.json`,
+      {
+        params: { app_id: TRANSPORT_APP_ID, app_key: TRANSPORT_APP_KEY, modes_of_transport: "train,bus,tram" },
+        timeout: 10000,
+      }
+    );
     return response.data;
   } catch (err) {
     console.warn("[Chains] TransportAPI failed, using mock:", err);
@@ -35,121 +31,197 @@ async function getTransportRoute(fromPostcode: string, toPostcode: string) {
 }
 
 function getMockTransportRoute(fromPostcode: string, toPostcode: string) {
-  // Realistic mock transport options for UK
-  return {
-    routes: [
-      {
-        mode: "train",
-        duration_mins: 45,
-        cost: 12.50,
-        operator: "National Rail",
-        changes: 0,
-        departure_time: "10:15",
-        arrival_time: "11:00",
-      },
-      {
-        mode: "bus",
-        duration_mins: 75,
-        cost: 3.50,
-        operator: "National Express",
-        changes: 1,
-        departure_time: "10:00",
-        arrival_time: "11:15",
-      },
-    ],
-    from: fromPostcode,
-    to: toPostcode,
-    is_rural: false,
-  };
+  // Realistic mock — vary slightly based on postcode hash so legs look different
+  const seed = (fromPostcode.charCodeAt(0) + toPostcode.charCodeAt(0)) % 3;
+  const routes = [
+    {
+      mode: "train",
+      duration_mins: 35 + seed * 10,
+      cost: 8.50 + seed * 4,
+      operator: "National Rail",
+      changes: seed,
+      departure_time: `${8 + seed}:${seed === 0 ? "00" : seed === 1 ? "15" : "30"}`,
+      arrival_time: `${9 + seed}:${seed === 0 ? "05" : seed === 1 ? "22" : "45"}`,
+    },
+    {
+      mode: "bus",
+      duration_mins: 55 + seed * 15,
+      cost: 3.50 + seed,
+      operator: "National Express",
+      changes: 1,
+      departure_time: `${8 + seed}:00`,
+      arrival_time: `${9 + seed}:${seed === 0 ? "10" : "25"}`,
+    },
+    {
+      mode: "taxi",
+      duration_mins: 20 + seed * 5,
+      cost: 18 + seed * 6,
+      operator: "Local Taxi",
+      changes: 0,
+      departure_time: "On demand",
+      arrival_time: "On demand",
+    },
+  ];
+  return { routes, from: fromPostcode, to: toPostcode, is_rural: false };
 }
 
-function detectRiskFlags(legs: Array<{ durationMins: number; mode: string; isRural?: boolean }>, jobCount: number): string[] {
+function detectRiskFlags(
+  legs: Array<{ durationMins: number; mode: string; isRural?: boolean }>,
+  jobCount: number
+): string[] {
   const flags: string[] = [];
-
   for (const leg of legs) {
-    if (leg.durationMins < 15) flags.push("Tight connection — less than 15 mins between jobs");
+    if (leg.durationMins < 15) flags.push("Tight connection — less than 15 mins between legs");
     if (leg.isRural) flags.push("Rural area detected — limited public transport, consider taxi");
     if (leg.mode === "taxi" && leg.durationMins > 30) flags.push("Long taxi leg — check cost vs earnings");
   }
-
   if (jobCount >= 3) flags.push("3-job chain — allow extra buffer time for delays");
-
   return Array.from(new Set(flags));
 }
 
+// Transport leg shape used throughout
+const transportLegSchema = z.object({
+  fromPostcode: z.string(),
+  toPostcode: z.string(),
+  legType: z.enum(["homeToPickup", "reposition", "homeReturn"]),
+  options: z.array(z.object({
+    mode: z.string(),
+    durationMins: z.number(),
+    cost: z.number(),
+    operator: z.string().optional(),
+    changes: z.number().optional(),
+    departureTime: z.string().optional(),
+    arrivalTime: z.string().optional(),
+  })),
+  selectedOptionIndex: z.number().default(0),
+  noTransitZone: z.boolean().default(false),
+});
+
 export const chainsRouter = router({
-  // Plan a chain: calculate transport legs between jobs
+  // Plan a chain: full door-to-door route including home travel legs
   plan: protectedProcedure
     .input(z.object({
       jobIds: z.array(z.number()).min(2).max(3),
-      repositionCosts: z.array(z.object({
-        cost: z.number(),
-        mode: z.enum(["train", "bus", "tram", "taxi", "walk", "scooter", "drive", "none"]),
-        durationMins: z.number(),
+      // Per-leg selected option indices (for re-planning with different choices)
+      legSelections: z.array(z.object({
+        legIndex: z.number(),
+        optionIndex: z.number(),
       })).optional(),
     }))
     .mutation(async ({ ctx, input }) => {
       const db = await getDb();
       if (!db) throw new Error("Database unavailable");
 
-      // Fetch all jobs
+      // Fetch jobs
       const jobList = await db.select().from(jobs)
         .where(and(inArray(jobs.id, input.jobIds), eq(jobs.userId, ctx.user.id)));
-
       if (jobList.length !== input.jobIds.length) {
         throw new Error("Some jobs not found or don't belong to you");
       }
-
-      // Sort jobs by their position in the input array
       const orderedJobs = input.jobIds.map(id => jobList.find(j => j.id === id)!);
 
-      // Get transport routes between each consecutive pair
-      const repositionLegs: Array<{
+      // Fetch user settings for home postcode
+      const settingsRows = await db.select().from(userSettings)
+        .where(eq(userSettings.userId, ctx.user.id)).limit(1);
+      const s = settingsRows[0];
+      const homePostcode = s?.homePostcode ?? "";
+
+      // Build the full leg sequence:
+      // [homeToPickup1, driveLeg1, reposition1, driveLeg2, ..., homeReturn]
+      // Transport legs: homeToPickup, repositions, homeReturn
+      // Drive legs: one per job
+
+      // --- Transport legs ---
+      type TransportLeg = {
         fromPostcode: string;
         toPostcode: string;
-        options: Array<{ from: string; to: string; mode: string; durationMins: number; cost: number; operator?: string; changes?: number; departureTime?: string; arrivalTime?: string; isRural: boolean }>;
+        legType: "homeToPickup" | "reposition" | "homeReturn";
+        options: Array<{
+          mode: string; durationMins: number; cost: number;
+          operator?: string; changes?: number; departureTime?: string; arrivalTime?: string;
+        }>;
+        selectedOptionIndex: number;
         noTransitZone: boolean;
-        riskFlags: string[];
-      }> = [];
-      for (let i = 0; i < orderedJobs.length - 1; i++) {
-        const from = orderedJobs[i]!;
-        const to = orderedJobs[i + 1]!;
-        const transportData = await getTransportRoute(from.dropoffPostcode, to.pickupPostcode);
+      };
 
-        const options = (transportData.routes ?? []).map((r: {
-          mode: string;
-          duration_mins: number;
-          cost: number;
-          operator?: string;
-          changes?: number;
-          departure_time?: string;
-          arrival_time?: string;
-        }) => ({
-          from: from.dropoffPostcode,
-          to: to.pickupPostcode,
-          mode: r.mode as string,
-          durationMins: r.duration_mins,
-          cost: r.cost,
-          operator: r.operator,
-          changes: r.changes,
-          departureTime: r.departure_time,
-          arrivalTime: r.arrival_time,
-          isRural: transportData.is_rural ?? false,
-        }));
+      const transportLegs: TransportLeg[] = [];
 
-        repositionLegs.push({
-          fromPostcode: from.dropoffPostcode,
-          toPostcode: to.pickupPostcode,
-          options,
-          noTransitZone: transportData.is_rural ?? false,
-          riskFlags: transportData.is_rural ? ["Rural area — limited public transport"] : [],
+      // Leg 0: home → first pickup
+      if (homePostcode) {
+        const data = await getTransportRoute(homePostcode, orderedJobs[0]!.pickupPostcode);
+        transportLegs.push({
+          fromPostcode: homePostcode,
+          toPostcode: orderedJobs[0]!.pickupPostcode,
+          legType: "homeToPickup",
+          options: (data.routes ?? []).map((r: { mode: string; duration_mins: number; cost: number; operator?: string; changes?: number; departure_time?: string; arrival_time?: string }) => ({
+            mode: r.mode,
+            durationMins: r.duration_mins,
+            cost: r.cost,
+            operator: r.operator,
+            changes: r.changes,
+            departureTime: r.departure_time,
+            arrivalTime: r.arrival_time,
+          })),
+          selectedOptionIndex: 0,
+          noTransitZone: data.is_rural ?? false,
         });
       }
 
-      // Calculate totals
-      const settings = await db.select().from(userSettings).where(eq(userSettings.userId, ctx.user.id)).limit(1);
-      const s = settings[0];
+      // Reposition legs: dropoff[i] → pickup[i+1]
+      for (let i = 0; i < orderedJobs.length - 1; i++) {
+        const from = orderedJobs[i]!;
+        const to = orderedJobs[i + 1]!;
+        const data = await getTransportRoute(from.dropoffPostcode, to.pickupPostcode);
+        transportLegs.push({
+          fromPostcode: from.dropoffPostcode,
+          toPostcode: to.pickupPostcode,
+          legType: "reposition",
+          options: (data.routes ?? []).map((r: { mode: string; duration_mins: number; cost: number; operator?: string; changes?: number; departure_time?: string; arrival_time?: string }) => ({
+            mode: r.mode,
+            durationMins: r.duration_mins,
+            cost: r.cost,
+            operator: r.operator,
+            changes: r.changes,
+            departureTime: r.departure_time,
+            arrivalTime: r.arrival_time,
+          })),
+          selectedOptionIndex: 0,
+          noTransitZone: data.is_rural ?? false,
+        });
+      }
 
+      // Last leg: last dropoff → home
+      if (homePostcode) {
+        const lastJob = orderedJobs[orderedJobs.length - 1]!;
+        const data = await getTransportRoute(lastJob.dropoffPostcode, homePostcode);
+        transportLegs.push({
+          fromPostcode: lastJob.dropoffPostcode,
+          toPostcode: homePostcode,
+          legType: "homeReturn",
+          options: (data.routes ?? []).map((r: { mode: string; duration_mins: number; cost: number; operator?: string; changes?: number; departure_time?: string; arrival_time?: string }) => ({
+            mode: r.mode,
+            durationMins: r.duration_mins,
+            cost: r.cost,
+            operator: r.operator,
+            changes: r.changes,
+            departureTime: r.departure_time,
+            arrivalTime: r.arrival_time,
+          })),
+          selectedOptionIndex: 0,
+          noTransitZone: data.is_rural ?? false,
+        });
+      }
+
+      // Apply any user-selected option indices
+      if (input.legSelections) {
+        for (const sel of input.legSelections) {
+          if (transportLegs[sel.legIndex]) {
+            transportLegs[sel.legIndex]!.selectedOptionIndex = sel.optionIndex;
+          }
+        }
+      }
+
+      // --- Calculate totals ---
       let totalEarnings = 0;
       let totalFuelCost = 0;
       let totalBrokerFees = 0;
@@ -157,7 +229,6 @@ export const chainsRouter = router({
       let totalDurationMins = 0;
 
       for (const job of orderedJobs) {
-        // TiDB returns decimal columns as strings — coerce all to Number before arithmetic
         const deliveryFee = Number(job.deliveryFee);
         const fuelDeposit = Number(job.fuelDeposit ?? 0);
         const estimatedFuelCost = Number(job.estimatedFuelCost ?? 0);
@@ -167,45 +238,49 @@ export const chainsRouter = router({
         const estimatedDurationMins = Number(job.estimatedDurationMins ?? 0);
 
         totalEarnings += deliveryFee + fuelDeposit;
-        totalFuelCost += estimatedFuelCost; // informational only — not deducted
+        totalFuelCost += estimatedFuelCost;
         totalBrokerFees += (deliveryFee * brokerFeePercent / 100) + brokerFeeFixed;
         totalDistanceMiles += estimatedDistanceMiles;
         totalDurationMins += estimatedDurationMins;
       }
 
-      // Add reposition costs
-      const selectedReposCosts = input.repositionCosts ?? repositionLegs.map(leg => ({
-        cost: leg.options[0]?.cost ?? 0,
-        mode: (leg.options[0]?.mode ?? "train") as "train" | "bus" | "tram" | "taxi" | "walk" | "scooter" | "drive" | "none",
-        durationMins: leg.options[0]?.durationMins ?? 0,
-      }));
+      // Sum all transport leg costs (home travel + repositions)
+      let totalTransportCost = 0;
+      let totalTransportMins = 0;
+      for (const leg of transportLegs) {
+        const opt = leg.options[leg.selectedOptionIndex] ?? leg.options[0];
+        if (opt) {
+          totalTransportCost += opt.cost;
+          totalTransportMins += opt.durationMins;
+        }
+      }
+      totalDurationMins += totalTransportMins;
 
-      const totalRepositionCost = selectedReposCosts.reduce((sum, r) => sum + r.cost, 0);
-      const totalRepositionMins = selectedReposCosts.reduce((sum, r) => sum + r.durationMins, 0);
-
-      totalDurationMins += totalRepositionMins;
-
-      // Only real out-of-pocket deductions: broker fees + reposition travel costs
+      // Deductions: broker fees + all transport costs (home + reposition)
       // Fuel is NOT deducted — drivers claim it back
-      const totalCosts = totalBrokerFees + totalRepositionCost;
+      const totalCosts = totalBrokerFees + totalTransportCost;
       const totalNetProfit = totalEarnings - totalCosts;
       const profitPerHour = totalDurationMins > 0 ? (totalNetProfit / totalDurationMins) * 60 : 0;
 
       const riskFlags = detectRiskFlags(
-        selectedReposCosts.map((r, i) => ({
-          durationMins: r.durationMins,
-          mode: r.mode,
-          isRural: repositionLegs[i]?.noTransitZone ?? false,
-        })),
+        transportLegs.map(leg => {
+          const opt = leg.options[leg.selectedOptionIndex] ?? leg.options[0];
+          return {
+            durationMins: opt?.durationMins ?? 0,
+            mode: opt?.mode ?? "train",
+            isRural: leg.noTransitZone,
+          };
+        }),
         orderedJobs.length
       );
 
       return {
         jobs: orderedJobs,
-        repositionLegs,
+        transportLegs,
+        homePostcode,
         summary: {
           totalEarnings,
-          totalRepositionCost,
+          totalTransportCost,
           totalFuelCost,
           totalBrokerFees,
           totalTimeValue: 0,
@@ -225,10 +300,10 @@ export const chainsRouter = router({
     .input(z.object({
       name: z.string().optional(),
       jobIds: z.array(z.number()).min(2).max(3),
-      repositionLegs: z.any(),
+      transportLegs: z.any(),
       summary: z.object({
         totalEarnings: z.number(),
-        totalRepositionCost: z.number(),
+        totalTransportCost: z.number(),
         totalFuelCost: z.number(),
         totalBrokerFees: z.number(),
         totalTimeValue: z.number(),
@@ -257,13 +332,12 @@ export const chainsRouter = router({
         totalDistanceMiles: input.summary.totalDistanceMiles,
         profitPerHour: input.summary.profitPerHour,
         riskFlags: input.summary.riskFlags,
-        repositionLegs: input.repositionLegs,
+        repositionLegs: input.transportLegs,
         scheduledDate: input.scheduledDate ? new Date(input.scheduledDate) : undefined,
       }).$returningId();
 
       const chainId = chain!.id;
 
-      // Insert chain-job relationships
       for (let i = 0; i < input.jobIds.length; i++) {
         await db.insert(chainJobs).values({
           chainId,
@@ -321,7 +395,7 @@ export const chainsRouter = router({
       if (!db) throw new Error("Database unavailable");
 
       const token = nanoid(32);
-      const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days
+      const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
 
       await db.update(jobChains)
         .set({ shareToken: token, shareExpiresAt: expiresAt })
