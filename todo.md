@@ -177,3 +177,10 @@
 - [ ] 🏅 Loyal Driver — use the app for 30 days
 - [ ] 🚀 Profit King — achieve £0.50+ per mile on 5 jobs
 - [ ] 🌟 Legend — earn £1,000 in a single week
+
+## Feature: Landing Page Enhancements
+- [x] Hero video: looping silent background video on landing page
+- [x] Social proof section: star ratings and driver quotes
+- [x] PWA manifest: manifest.json with app name, icons, theme colour
+- [x] PWA icons: 192x192 and 512x512 app icons generated
+- [x] PWA: Add to home screen works on iOS and Android

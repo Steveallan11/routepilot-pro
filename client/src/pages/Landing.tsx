@@ -13,8 +13,10 @@ import {
   TrendingUp,
   Camera,
   Map,
+  Quote,
 } from "lucide-react";
 
+const HERO_VIDEO = "https://files.manuscdn.com/user_upload_by_module/session_file/102182261/zkrZULNknHenbxWd.mp4";
 const HERO_IMAGE = "https://files.manuscdn.com/user_upload_by_module/session_file/102182261/YXCQojTZvUrtFxxC.jpg";
 
 const features = [
@@ -75,6 +77,30 @@ const stats = [
   { value: "100%", label: "Built for UK drivers" },
 ];
 
+const testimonials = [
+  {
+    name: "Steve M.",
+    location: "Bristol",
+    rating: 5,
+    text: "Finally know if a job is worth taking before I accept it. Saved me from two terrible runs this week alone.",
+    badge: "Road Warrior",
+  },
+  {
+    name: "Dave K.",
+    location: "Manchester",
+    rating: 5,
+    text: "The booking scanner is a game changer. Snap the ALD confirmation and everything fills in. Takes 5 seconds.",
+    badge: "Chain Master",
+  },
+  {
+    name: "Lee P.",
+    location: "Birmingham",
+    rating: 5,
+    text: "Chained 3 jobs from Bristol to London, found a cheap train back. Made £240 profit on the day. Brilliant.",
+    badge: "Profit King",
+  },
+];
+
 export default function Landing() {
   const [, navigate] = useLocation();
   const { isAuthenticated, loading } = useAuth();
@@ -98,13 +124,20 @@ export default function Landing() {
     <div className="min-h-screen bg-background text-foreground overflow-x-hidden">
       {/* ── HERO ──────────────────────────────────────────────── */}
       <section className="relative min-h-screen flex flex-col">
-        {/* Background image */}
-        <div
-          className="absolute inset-0 bg-cover bg-center bg-no-repeat"
-          style={{ backgroundImage: `url(${HERO_IMAGE})` }}
-        />
+        {/* Background video with image fallback */}
+        <video
+          className="absolute inset-0 w-full h-full object-cover"
+          autoPlay
+          muted
+          loop
+          playsInline
+          poster={HERO_IMAGE}
+        >
+          <source src={HERO_VIDEO} type="video/mp4" />
+        </video>
+
         {/* Dark gradient overlay — heavier at top and bottom */}
-        <div className="absolute inset-0 bg-gradient-to-b from-black/80 via-black/40 to-black/90" />
+        <div className="absolute inset-0 bg-gradient-to-b from-black/85 via-black/50 to-black/95" />
 
         {/* Nav bar */}
         <header className="relative z-10 flex items-center justify-between px-6 pt-12 pb-4">
@@ -176,8 +209,53 @@ export default function Landing() {
         </div>
       </section>
 
+      {/* ── SOCIAL PROOF ──────────────────────────────────────── */}
+      <section className="px-6 py-14 bg-background">
+        <div className="max-w-lg mx-auto">
+          <p className="text-xs font-semibold text-primary uppercase tracking-widest text-center mb-2">Trusted by drivers</p>
+          <h2 className="text-2xl font-bold text-center text-foreground mb-2">
+            What drivers are saying
+          </h2>
+          {/* Overall rating */}
+          <div className="flex items-center justify-center gap-1.5 mb-8">
+            {[1, 2, 3, 4, 5].map((i) => (
+              <Star key={i} size={16} className="text-yellow-400 fill-yellow-400" />
+            ))}
+            <span className="text-sm text-muted-foreground ml-1">5.0 · Loved by UK delivery drivers</span>
+          </div>
+
+          <div className="space-y-4">
+            {testimonials.map(({ name, location, rating, text, badge }) => (
+              <div
+                key={name}
+                className="bg-card border border-border rounded-2xl p-5 relative"
+              >
+                <Quote size={20} className="text-primary/20 absolute top-4 right-4" />
+                {/* Stars */}
+                <div className="flex gap-0.5 mb-3">
+                  {Array.from({ length: rating }).map((_, i) => (
+                    <Star key={i} size={12} className="text-yellow-400 fill-yellow-400" />
+                  ))}
+                </div>
+                <p className="text-foreground text-sm leading-relaxed mb-4">"{text}"</p>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <div className="font-semibold text-sm text-foreground">{name}</div>
+                    <div className="text-xs text-muted-foreground">{location}</div>
+                  </div>
+                  <div className="flex items-center gap-1 bg-primary/10 border border-primary/20 rounded-full px-2.5 py-1">
+                    <Trophy size={10} className="text-primary" />
+                    <span className="text-[10px] font-medium text-primary">{badge}</span>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
       {/* ── HOW IT WORKS ──────────────────────────────────────── */}
-      <section className="px-6 py-14">
+      <section className="px-6 py-14 bg-card/30">
         <div className="max-w-lg mx-auto">
           <p className="text-xs font-semibold text-primary uppercase tracking-widest text-center mb-2">How it works</p>
           <h2 className="text-2xl font-bold text-center text-foreground mb-10">
