@@ -53,3 +53,6 @@
 - [x] Frontend: Camera/upload button on Calculator page
 - [x] Frontend: Show extracted fields preview with edit-before-confirm step
 - [x] Frontend: Auto-fill all form fields from extracted data
+
+## Fix: Scan Booking input
+- [x] Remove capture="environment" so users can choose from gallery/files, not just camera
