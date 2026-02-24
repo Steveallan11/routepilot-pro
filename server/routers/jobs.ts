@@ -163,7 +163,7 @@ export const jobsRouter = router({
         travelHomeCost: input.travelHomeCost,
       });
 
-      await db.insert(jobs).values({
+      const insertResult = await db.insert(jobs).values({
         userId: ctx.user.id,
         status: "planned",
         pickupPostcode: input.pickupPostcode.toUpperCase(),
@@ -216,6 +216,8 @@ export const jobsRouter = router({
         customerName: input.customerName ?? null,
       });
 
+      const insertedId = (insertResult as unknown as { insertId?: number })?.insertId ?? 0;
+
       // Fire gamification in background (don't block response)
       checkAndAwardBadges(ctx.user.id, {
         jobMiles: distanceMiles,
@@ -225,7 +227,7 @@ export const jobsRouter = router({
         isScanned: !!input.bookingImageUrl,
       }).catch(e => console.warn("[Gamification]", e));
 
-      return { success: true, breakdown, distanceMiles, durationMins };
+      return { success: true, jobId: insertedId, breakdown, distanceMiles, durationMins };
     }),
 
   // List user's jobs

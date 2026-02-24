@@ -183,3 +183,7 @@
 - [x] Travel Planner: multi-modal step-by-step journey with bus/train/taxi and costs
 - [x] Push notifications: PWA service worker + 30-min job reminder
 - [x] Auto-schedule reminder when a job with a scheduled time is saved
+
+## Bug Fix: Create Job Error
+- [x] Diagnose runtime error when creating a job — jobs.create did not return insertId, causing crash in notification scheduler
+- [x] Fix: return jobId from create procedure; fix frontend to read it correctly

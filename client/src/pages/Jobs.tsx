@@ -591,7 +591,7 @@ function AddJobSheet({ onClose, onSaved, prefilledDate }: { onClose: () => void;
         dropoffPostcode: dropoff,
         scheduledPickupAt: scheduledDate ? new Date(scheduledDate) : null,
         brokerName: brokerName || null,
-      });
+      } as { id: number; pickupPostcode: string; dropoffPostcode: string; scheduledPickupAt?: Date | null; brokerName?: string | null });
       onClose();
     } catch {
       toast.error("Failed to save job");
