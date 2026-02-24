@@ -1,0 +1,13 @@
+{
+  "query": "SHOW TABLES LIKE 'receipts';",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway02.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 29dmg1z8s7MGkda.cd2f01f00c99 --database 6VTDyDwMUZs22XSbYJviE3 --execute SHOW TABLES LIKE 'receipts';",
+  "rows": [
+    {
+      "Tables_in_6VTDyDwMUZs22XSbYJviE3 (receipts)": "receipts"
+    }
+  ],
+  "messages": [],
+  "stdout": "Tables_in_6VTDyDwMUZs22XSbYJviE3 (receipts)\nreceipts\n",
+  "stderr": "",
+  "execution_time_ms": 96
+}

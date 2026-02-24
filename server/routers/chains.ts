@@ -12,7 +12,7 @@ import { makeRequest } from "../_core/map";
 // ============================================================================
 
 type TransitStep = {
-  mode: "WALK" | "BUS" | "TRAIN" | "TRAM" | "SUBWAY" | "RAIL" | "FERRY" | "CABLE_CAR" | "GONDOLA" | "FUNICULAR" | "OTHER";
+  mode: "WALK" | "BUS" | "TRAIN" | "TRAM" | "SUBWAY" | "RAIL" | "FERRY" | "CABLE_CAR" | "GONDOLA" | "FUNICULAR" | "OTHER" | "SCOOTER";
   instruction: string;
   durationMins: number;
   distanceMetres: number;
@@ -213,16 +213,22 @@ async function getRealTransitOptions(
       });
     }
 
-    // Always add taxi as a fallback option
-    const drivingResult = await makeRequest<GoogleDirectionsResult>(
-      "/maps/api/directions/json",
-      {
+    // Always add taxi + scooter options via the driving/cycling API
+    const [drivingResult, cyclingResult] = await Promise.all([
+      makeRequest<GoogleDirectionsResult>("/maps/api/directions/json", {
         origin: fromPostcode + ", UK",
         destination: toPostcode + ", UK",
         mode: "driving",
         region: "gb",
-      }
-    );
+      }),
+      makeRequest<GoogleDirectionsResult>("/maps/api/directions/json", {
+        origin: fromPostcode + ", UK",
+        destination: toPostcode + ", UK",
+        mode: "bicycling",
+        region: "gb",
+      }),
+    ]);
+
     if (drivingResult.status === "OK" && drivingResult.routes?.[0]) {
       const driveLeg = drivingResult.routes[0].legs[0];
       if (driveLeg) {
@@ -245,6 +251,61 @@ async function getRealTransitOptions(
           }],
           summary: "Taxi",
         });
+      }
+    }
+
+    // Add Voi & Lime e-scooter options for short-to-medium urban legs
+    if (cyclingResult.status === "OK" && cyclingResult.routes?.[0]) {
+      const cycleLeg = cyclingResult.routes[0].legs[0];
+      if (cycleLeg) {
+        const cycleKm = cycleLeg.distance.value / 1000;
+        // Scooters are practical for 0.5–8 km urban legs
+        if (cycleKm >= 0.5 && cycleKm <= 8) {
+          // Scooters travel ~15 km/h vs cycling ~12 km/h, so slightly faster
+          const scooterMins = Math.round(cycleLeg.duration.value / 60 * 0.8);
+          // Voi pricing: £1 unlock + £0.20/min (UK 2024)
+          const voiCost = Math.round((1.0 + scooterMins * 0.20) * 100) / 100;
+          // Lime pricing: £1 unlock + £0.17/min (UK 2024)
+          const limeCost = Math.round((1.0 + scooterMins * 0.17) * 100) / 100;
+
+          options.push({
+            mode: "Scooter",
+            durationMins: scooterMins,
+            cost: voiCost,
+            operator: "Voi",
+            changes: 0,
+            departureTime: "On demand",
+            arrivalTime: "On demand",
+            steps: [{
+              mode: "SCOOTER",
+              instruction: `Voi e-scooter from ${fromPostcode} to ${toPostcode}`,
+              durationMins: scooterMins,
+              distanceMetres: cycleLeg.distance.value,
+              operator: "Voi",
+              lineName: "Voi e-scooter",
+            }],
+            summary: "Voi Scooter",
+          });
+
+          options.push({
+            mode: "Scooter",
+            durationMins: scooterMins,
+            cost: limeCost,
+            operator: "Lime",
+            changes: 0,
+            departureTime: "On demand",
+            arrivalTime: "On demand",
+            steps: [{
+              mode: "SCOOTER",
+              instruction: `Lime e-scooter from ${fromPostcode} to ${toPostcode}`,
+              durationMins: scooterMins,
+              distanceMetres: cycleLeg.distance.value,
+              operator: "Lime",
+              lineName: "Lime e-scooter",
+            }],
+            summary: "Lime Scooter",
+          });
+        }
       }
     }
 

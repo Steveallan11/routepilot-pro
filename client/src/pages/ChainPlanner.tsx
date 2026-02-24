@@ -24,6 +24,16 @@ function fmt(val: unknown, decimals = 2): string {
   return n.toFixed(decimals);
 }
 
+// Scooter SVG icon (inline, no external dep)
+const ScooterIcon = ({ size = 14 }: { size?: number }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <circle cx="7" cy="17" r="2"/>
+    <circle cx="17" cy="17" r="2"/>
+    <path d="M5 17H3v-3l4-4h6l2 4h3"/>
+    <path d="M9 10V6l4 1"/>
+  </svg>
+);
+
 const modeIcons: Record<string, React.ReactNode> = {
   train: <Train size={14} />,
   TRAIN: <Train size={14} />,
@@ -38,7 +48,9 @@ const modeIcons: Record<string, React.ReactNode> = {
   walk: <Footprints size={14} />,
   WALK: <Footprints size={14} />,
   drive: <Car size={14} />,
-  scooter: <Car size={14} />,
+  scooter: <ScooterIcon size={14} />,
+  Scooter: <ScooterIcon size={14} />,
+  SCOOTER: <ScooterIcon size={14} />,
 };
 
 const stepModeColors: Record<string, string> = {
@@ -49,6 +61,7 @@ const stepModeColors: Record<string, string> = {
   TRAM: "text-purple-400",
   SUBWAY: "text-indigo-400",
   OTHER: "text-yellow-400",
+  SCOOTER: "text-orange-400",
 };
 
 function StepDetail({ step }: { step: TransitStep }) {
@@ -91,11 +104,17 @@ function StepDetail({ step }: { step: TransitStep }) {
 
 const modeColors: Record<string, string> = {
   train: "text-blue-400",
+  Train: "text-blue-400",
   bus: "text-green-400",
+  Bus: "text-green-400",
   tram: "text-purple-400",
   taxi: "text-yellow-400",
+  Taxi: "text-yellow-400",
   walk: "text-gray-400",
+  Walk: "text-gray-400",
   drive: "text-orange-400",
+  scooter: "text-orange-400",
+  Scooter: "text-orange-400",
 };
 
 type TransitStep = {

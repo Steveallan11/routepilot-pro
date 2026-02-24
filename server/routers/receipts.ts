@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { protectedProcedure, router } from "../_core/trpc";
 import { getDb } from "../db";
-import { receipts } from "../../drizzle/schema";
+import { receipts, jobs } from "../../drizzle/schema";
 import { eq, and, desc } from "drizzle-orm";
 import { invokeLLM } from "../_core/llm";
 import { storagePut } from "../storage";
@@ -150,6 +150,72 @@ Always return amounts in GBP (£). If a field is not visible or not applicable, 
         .where(and(eq(receipts.id, input.receiptId), eq(receipts.userId, ctx.user.id)));
 
       return { success: true };
+    }),
+
+  // Apply a receipt's cost to a job (update job's travel/fuel actual costs)
+  applyToJob: protectedProcedure
+    .input(z.object({
+      receiptId: z.number(),
+      jobId: z.number(),
+      applyAs: z.enum(["travelToJob", "travelHome", "fuelActual"]),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const db = await getDb();
+      if (!db) throw new Error("Database unavailable");
+
+      // Get the receipt
+      const [receipt] = await db.select().from(receipts)
+        .where(and(eq(receipts.id, input.receiptId), eq(receipts.userId, ctx.user.id)))
+        .limit(1);
+      if (!receipt) throw new Error("Receipt not found");
+
+      const amount = Number(receipt.totalAmount ?? 0);
+
+      // Determine mode from category
+      const modeMap: Record<string, "train" | "bus" | "taxi" | "own_car" | "none"> = {
+        train: "train",
+        bus: "bus",
+        taxi: "taxi",
+        fuel: "own_car",
+        other: "none",
+        parking: "own_car",
+        toll: "own_car",
+        food: "none",
+      };
+      const mode = modeMap[receipt.category ?? "other"] ?? "none";
+
+      const updateFields: Record<string, unknown> = {};
+      if (input.applyAs === "travelToJob") {
+        updateFields.travelToJobCost = amount;
+        if (mode !== "none") updateFields.travelToJobMode = mode;
+      } else if (input.applyAs === "travelHome") {
+        updateFields.travelHomeCost = amount;
+        if (mode !== "none") updateFields.travelHomeMode = mode;
+      } else if (input.applyAs === "fuelActual") {
+        updateFields.actualFuelCost = amount;
+      }
+
+      // Also attach receipt to job
+      await db.update(receipts)
+        .set({ jobId: input.jobId })
+        .where(eq(receipts.id, input.receiptId));
+
+      // Update the job with the actual cost fields
+      if (input.applyAs === "travelToJob") {
+        await db.update(jobs)
+          .set({ travelToJobCost: amount, ...(mode !== "none" ? { travelToJobMode: mode } : {}) })
+          .where(and(eq(jobs.id, input.jobId), eq(jobs.userId, ctx.user.id)));
+      } else if (input.applyAs === "travelHome") {
+        await db.update(jobs)
+          .set({ travelHomeCost: amount, ...(mode !== "none" ? { travelHomeMode: mode } : {}) })
+          .where(and(eq(jobs.id, input.jobId), eq(jobs.userId, ctx.user.id)));
+      } else if (input.applyAs === "fuelActual") {
+        await db.update(jobs)
+          .set({ actualFuelCost: amount })
+          .where(and(eq(jobs.id, input.jobId), eq(jobs.userId, ctx.user.id)));
+      }
+
+      return { success: true, amount, mode };
     }),
 
   // Delete a receipt

@@ -81,6 +81,7 @@ type Job = {
   actualNetProfit: number | null;
   actualDistanceMiles: number | null;
   actualDurationMins: number | null;
+  actualFuelCost: number | null;
   actualNotes: string | null;
   pickupAddress: string | null;
   dropoffAddress: string | null;
@@ -133,6 +134,197 @@ function formatDateTime(date: Date | null) {
 }
 
 // ─── Job Detail Sheet ─────────────────────────────────────────────────────────
+
+// ─── Receipt Scanner Section ─────────────────────────────────────────────────
+
+type ScannedReceipt = {
+  imageUrl: string;
+  merchantName: string | null;
+  receiptDate: string | null;
+  totalAmount: number | null;
+  category: string;
+  fuelLitres: number | null;
+  fuelPricePerLitre: number | null;
+  fuelType: string;
+  notes: string | null;
+  confidence: number;
+};
+
+function ReceiptScannerSection({ jobId }: { jobId: number }) {
+  const utils = trpc.useUtils();
+  const [scanned, setScanned] = useState<ScannedReceipt | null>(null);
+  const [scanning, setScanning] = useState(false);
+  const [applyAs, setApplyAs] = useState<"travelToJob" | "travelHome" | "fuelActual">("travelToJob");
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  const scanMutation = trpc.receipts.scanReceipt.useMutation({
+    onSuccess: (data) => {
+      setScanned(data as ScannedReceipt);
+      setScanning(false);
+      // Auto-detect applyAs from category
+      if (data.category === "fuel") setApplyAs("fuelActual");
+      else if (["train", "bus", "taxi"].includes(data.category)) setApplyAs("travelToJob");
+    },
+    onError: (err) => {
+      setScanning(false);
+      toast.error("Scan failed: " + err.message);
+    },
+  });
+
+  const applyMutation = trpc.receipts.applyToJob.useMutation({
+    onSuccess: (data) => {
+      toast.success(`£${fmt(data.amount)} applied to job`);
+      setScanned(null);
+      utils.jobs.list.invalidate();
+    },
+    onError: (err) => toast.error("Apply failed: " + err.message),
+  });
+
+  const { data: receiptsData } = trpc.receipts.list.useQuery({ jobId, limit: 10 });
+
+  const deleteMutation = trpc.receipts.delete.useMutation({
+    onSuccess: () => utils.receipts.list.invalidate(),
+  });
+
+  function handleFile(file: File) {
+    if (file.size > 16 * 1024 * 1024) { toast.error("File too large (max 16MB)"); return; }
+    setScanning(true);
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const base64 = (e.target?.result as string).split(",")[1];
+      scanMutation.mutate({ base64Data: base64, mimeType: file.type, jobId });
+    };
+    reader.readAsDataURL(file);
+  }
+
+  const CATEGORY_ICONS: Record<string, React.ReactNode> = {
+    fuel: <Fuel size={13} />,
+    train: <Train size={13} />,
+    bus: <Navigation size={13} />,
+    taxi: <Car size={13} />,
+    parking: <Car size={13} />,
+    toll: <PoundSterling size={13} />,
+    other: <Receipt size={13} />,
+  };
+
+  return (
+    <div>
+      <p className="text-xs text-muted-foreground uppercase tracking-wide font-medium mb-3 flex items-center gap-1.5">
+        <Receipt size={11} /> Receipts
+      </p>
+
+      {/* Scan button */}
+      {!scanned && (
+        <div className="flex gap-2 mb-3">
+          <input
+            ref={fileRef}
+            type="file"
+            accept="image/*"
+            capture="environment"
+            className="hidden"
+            onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFile(f); e.target.value = ""; }}
+          />
+          <Button
+            variant="outline"
+            className="flex-1 gap-2 border-dashed"
+            disabled={scanning}
+            onClick={() => fileRef.current?.click()}
+          >
+            {scanning ? <Loader2 size={14} className="animate-spin" /> : <Camera size={14} />}
+            {scanning ? "Scanning..." : "Scan Receipt"}
+          </Button>
+        </div>
+      )}
+
+      {/* Scanned preview */}
+      {scanned && (
+        <div className="bg-secondary rounded-xl p-3 space-y-3 mb-3">
+          <div className="flex items-start gap-3">
+            <img src={scanned.imageUrl} alt="Receipt" className="w-16 h-20 object-cover rounded-lg flex-shrink-0" />
+            <div className="flex-1 space-y-1 text-sm">
+              <p className="font-semibold">{scanned.merchantName ?? "Unknown merchant"}</p>
+              {scanned.receiptDate && <p className="text-xs text-muted-foreground">{new Date(scanned.receiptDate).toLocaleDateString("en-GB")}</p>}
+              <div className="flex items-center gap-1.5">
+                {CATEGORY_ICONS[scanned.category] ?? <Receipt size={13} />}
+                <span className="capitalize text-xs">{scanned.category}</span>
+              </div>
+              <p className="text-xl font-bold font-mono text-primary">£{fmt(scanned.totalAmount ?? 0)}</p>
+              {scanned.fuelLitres && (
+                <p className="text-xs text-muted-foreground">{scanned.fuelLitres.toFixed(2)}L @ £{fmt(scanned.fuelPricePerLitre ?? 0, 3)}/L · {scanned.fuelType}</p>
+              )}
+            </div>
+          </div>
+
+          {/* Apply as selector */}
+          <div>
+            <p className="text-xs text-muted-foreground mb-1.5">Apply cost as:</p>
+            <div className="grid grid-cols-3 gap-1.5">
+              {(["travelToJob", "travelHome", "fuelActual"] as const).map((opt) => (
+                <button
+                  key={opt}
+                  onClick={() => setApplyAs(opt)}
+                  className={cn(
+                    "text-xs rounded-lg px-2 py-1.5 border transition-colors",
+                    applyAs === opt ? "border-primary bg-primary/10 text-primary" : "border-border text-muted-foreground"
+                  )}
+                >
+                  {opt === "travelToJob" ? "Travel to Job" : opt === "travelHome" ? "Travel Home" : "Fuel Cost"}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="flex gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              className="flex-1"
+              onClick={() => setScanned(null)}
+            >
+              Discard
+            </Button>
+            <Button
+              size="sm"
+              className="flex-1"
+              disabled={applyMutation.isPending}
+              onClick={() => {
+                // We need the receipt ID — re-fetch latest receipt for this job
+                utils.receipts.list.fetch({ jobId, limit: 1 }).then((res) => {
+                  const r = res.receipts[0];
+                  if (!r) { toast.error("Receipt not found"); return; }
+                  applyMutation.mutate({ receiptId: r.id, jobId, applyAs });
+                });
+              }}
+            >
+              {applyMutation.isPending ? <Loader2 size={13} className="animate-spin" /> : "Apply to Job"}
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {/* Existing receipts list */}
+      {(receiptsData?.receipts ?? []).length > 0 && (
+        <div className="space-y-2">
+          {receiptsData!.receipts.map((r) => (
+            <div key={r.id} className="flex items-center gap-2 bg-secondary/50 rounded-xl px-3 py-2">
+              <img src={r.imageUrl} alt="" className="w-10 h-10 object-cover rounded-lg flex-shrink-0" />
+              <div className="flex-1 min-w-0">
+                <p className="text-xs font-medium truncate">{r.merchantName ?? "Receipt"}</p>
+                <p className="text-xs text-muted-foreground capitalize">{r.category} · £{fmt(r.totalAmount ?? 0)}</p>
+              </div>
+              <button
+                className="text-muted-foreground hover:text-destructive transition-colors p-1"
+                onClick={() => deleteMutation.mutate({ id: r.id })}
+              >
+                <Trash2 size={13} />
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
 
 function JobDetailSheet({ job, onClose, onStatusChange, onDelete, onEdit, onDuplicate }: {
   job: Job;
@@ -228,12 +420,20 @@ function JobDetailSheet({ job, onClose, onStatusChange, onDelete, onEdit, onDupl
                   <span className="font-mono text-primary">+£{fmt(job.fuelDeposit ?? 0)}</span>
                 </div>
               )}
-              {(job.estimatedFuelCost ?? 0) > 0 && (
+              {((job.estimatedFuelCost ?? 0) > 0 || (job.actualFuelCost ?? 0) > 0) && (
                 <div className="flex justify-between">
                   <span className="text-muted-foreground flex items-center gap-1">
-                    <Fuel size={11} /> Fuel Cost <span className="text-xs text-blue-400">(claimed back)</span>
+                    <Fuel size={11} /> Fuel Cost
+                    {job.actualFuelCost != null
+                      ? <span className="text-xs text-green-400">(actual)</span>
+                      : <span className="text-xs text-blue-400">(est.)</span>}
                   </span>
-                  <span className="font-mono text-muted-foreground">£{fmt(job.estimatedFuelCost ?? 0)}</span>
+                  <div className="text-right">
+                    <span className="font-mono text-muted-foreground">£{fmt(job.actualFuelCost ?? job.estimatedFuelCost ?? 0)}</span>
+                    {job.actualFuelCost != null && job.estimatedFuelCost != null && Math.abs(Number(job.actualFuelCost) - Number(job.estimatedFuelCost)) > 0.01 && (
+                      <p className="text-[10px] text-muted-foreground line-through">£{fmt(job.estimatedFuelCost)}</p>
+                    )}
+                  </div>
                 </div>
               )}
               {brokerFee > 0 && (
@@ -424,6 +624,9 @@ function JobDetailSheet({ job, onClose, onStatusChange, onDelete, onEdit, onDupl
               <img src={job.bookingImageUrl} alt="Booking" className="w-full rounded-xl object-cover max-h-56" />
             </div>
           )}
+
+          {/* Receipts */}
+          <ReceiptScannerSection jobId={job.id} />
 
           {/* Notes */}
           {job.notes && (

@@ -230,3 +230,20 @@
 - [x] UI: Edit Job sheet (pre-filled form, broker auto-match)
 - [x] UI: Duplicate button in job detail sheet
 - [x] UI: Broker auto-match in AddJobSheet and EditJobSheet (auto-fill fee % from known brokers)
+
+## Feature: Voi/Lime E-Scooter Travel Options
+- [x] Server: add e-scooter option to chain transport legs (Voi & Lime pricing model)
+- [x] Server: estimate scooter cost based on distance (unlock fee + per-minute rate)
+- [x] Server: add scooter availability flag (urban areas only, 0.5-8km legs)
+- [x] UI: scooter icon and option card in TransportLegCard
+- [x] UI: Voi/Lime branding in option selector
+
+## Feature: Receipt Scanning (Travel & Fuel)
+- [x] DB: receipts table exists (jobId, category, amount, vendor, date, imageUrl, rawExtracted)
+- [x] Server: receipts router (scanReceipt, list, attachToJob, applyToJob, delete)
+- [x] Server: OCR via LLM vision to extract amount, vendor, date, fuel litres/price from receipt image
+- [x] Server: applyToJob procedure updates job travel/fuel costs from scanned receipt
+- [x] UI: receipt scanner button in job detail sheet (camera/file picker)
+- [x] UI: receipt gallery in job detail sheet showing all scanned receipts with delete
+- [x] UI: receipt scan result preview with apply-as selector (Travel to Job / Travel Home / Fuel)
+- [x] UI: job cost breakdown shows actual vs estimated with strikethrough when receipt applied
