@@ -95,6 +95,24 @@ export const jobs = mysqlTable("jobs", {
   // Route JSON from Maps API
   routeData: json("routeData"),
 
+  // Vehicle details (from scan or manual entry)
+  vehicleMake: varchar("vehicleMake", { length: 50 }),
+  vehicleModel: varchar("vehicleModel", { length: 50 }),
+  vehicleReg: varchar("vehicleReg", { length: 20 }),
+  vehicleFuelType: mysqlEnum("vehicleFuelType", ["petrol", "diesel", "electric", "hybrid", "unknown"]).default("unknown"),
+  vehicleColour: varchar("vehicleColour", { length: 30 }),
+
+  // Scanned booking distance/duration (from broker app screenshot)
+  scannedDistanceMiles: decimal("scannedDistanceMiles", { precision: 8, scale: 2 }).$type<number>(),
+  scannedDurationMins: decimal("scannedDurationMins", { precision: 8, scale: 2 }).$type<number>(),
+
+  // Travel expenses (cost to get to pickup / get home after dropoff)
+  travelToJobCost: decimal("travelToJobCost", { precision: 8, scale: 2 }).$type<number>().default(0 as unknown as number),
+  travelToJobMode: mysqlEnum("travelToJobMode", ["train", "bus", "taxi", "own_car", "none"]).default("none"),
+  travelHomePostcode: varchar("travelHomePostcode", { length: 10 }),
+  travelHomeCost: decimal("travelHomeCost", { precision: 8, scale: 2 }).$type<number>().default(0 as unknown as number),
+  travelHomeMode: mysqlEnum("travelHomeMode", ["train", "bus", "taxi", "own_car", "none"]).default("none"),
+
   scheduledPickupAt: timestamp("scheduledPickupAt"),
   completedAt: timestamp("completedAt"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
@@ -149,3 +167,31 @@ export const chainJobs = mysqlTable("chain_jobs", {
 
 export type ChainJob = typeof chainJobs.$inferSelect;
 export type InsertChainJob = typeof chainJobs.$inferInsert;
+
+// ─── Receipts ─────────────────────────────────────────────────────────────────
+
+export const receipts = mysqlTable("receipts", {
+  id: int("id").autoincrement().primaryKey(),
+  userId: int("userId").notNull(),
+  jobId: int("jobId"), // optional — can be attached to a job later
+
+  // Image
+  imageUrl: text("imageUrl").notNull(),
+
+  // AI-extracted fields
+  merchantName: varchar("merchantName", { length: 100 }),
+  receiptDate: timestamp("receiptDate"),
+  totalAmount: decimal("totalAmount", { precision: 8, scale: 2 }).$type<number>(),
+  category: mysqlEnum("category", ["fuel", "train", "bus", "taxi", "parking", "toll", "food", "other"]).default("other"),
+  fuelLitres: decimal("fuelLitres", { precision: 8, scale: 3 }).$type<number>(),
+  fuelPricePerLitre: decimal("fuelPricePerLitre", { precision: 6, scale: 4 }).$type<number>(),
+  fuelType: mysqlEnum("fuelType", ["petrol", "diesel", "electric", "unknown"]).default("unknown"),
+  notes: text("notes"),
+  rawExtracted: json("rawExtracted"), // full AI response for reference
+
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type Receipt = typeof receipts.$inferSelect;
+export type InsertReceipt = typeof receipts.$inferInsert;

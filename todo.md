@@ -65,3 +65,16 @@
 - [x] Frontend: Pass all scan data through to save mutation
 - [x] Frontend: Job sheet shows full details (broker, ref, addresses, distance, duration, image thumbnail)
 - [x] Frontend: History list shows broker name and job reference
+
+## Feature: Enhanced Calculator & Job Card
+- [x] Cost breakdown: show fuel deposit as +income line (already reimbursed, adds to total)
+- [x] Travel expenses: add fields for travel-to-job cost and travel-home/next-job cost (postcode + mode)
+- [x] Travel expenses: deduct from net profit and show in breakdown
+- [x] Job chaining on calculator: "Add another job" button to chain 2-3 jobs in one calculation
+- [x] Job card: show vehicle details (make/model, reg, fuel type) from scan or manual entry
+- [x] DB: add vehicleMake, vehicleModel, vehicleReg, vehicleFuelType fields to jobs table
+- [x] DB: add travelToJobCost, travelHomePostcode, travelHomeCost fields to jobs table
+- [x] Receipt scanner: scan fuel/train/parking receipts via AI image read
+- [x] Receipt scanner: attach receipts to a job, show in job history
+- [x] DB: receipts table (already exists — extend with AI scan fields)
+- [x] History: show receipts attached to each job

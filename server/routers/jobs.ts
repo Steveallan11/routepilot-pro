@@ -15,6 +15,18 @@ const jobInputSchema = z.object({
   brokerFeeFixed: z.number().min(0).default(0),
   fuelReimbursed: z.boolean().default(false),
   scheduledPickupAt: z.string().optional(),
+  // Travel expenses
+  travelToJobCost: z.number().min(0).default(0),
+  travelToJobMode: z.enum(["train", "bus", "taxi", "own_car", "none"]).default("none"),
+  travelHomePostcode: z.string().max(10).optional(),
+  travelHomeCost: z.number().min(0).default(0),
+  travelHomeMode: z.enum(["train", "bus", "taxi", "own_car", "none"]).default("none"),
+  // Vehicle details
+  vehicleMake: z.string().max(50).optional(),
+  vehicleModel: z.string().max(50).optional(),
+  vehicleReg: z.string().max(20).optional(),
+  vehicleFuelType: z.enum(["petrol", "diesel", "electric", "hybrid", "unknown"]).optional(),
+  vehicleColour: z.string().max(30).optional(),
   // Booking metadata (from AI scan or manual entry)
   brokerName: z.string().max(100).optional(),
   jobReference: z.string().max(100).optional(),
@@ -22,7 +34,7 @@ const jobInputSchema = z.object({
   dropoffAddress: z.string().optional(),
   bookingImageUrl: z.string().url().optional(),
   notes: z.string().optional(),
-  // Pre-calculated distance/duration from scan (override Maps API)
+  // Pre-scanned distance/duration from broker app screenshot
   scannedDistanceMiles: z.number().optional(),
   scannedDurationMins: z.number().optional(),
 });
@@ -111,6 +123,8 @@ export const jobsRouter = router({
         riskBufferPercent,
         enableTimeValue,
         enableWearTear,
+        travelToJobCost: input.travelToJobCost,
+        travelHomeCost: input.travelHomeCost,
       });
 
       return {
@@ -139,7 +153,7 @@ export const jobsRouter = router({
       const riskBufferPercent = settings?.riskBufferPercent ?? 10;
       const enableTimeValue = settings?.enableTimeValue ?? true;
       const enableWearTear = settings?.enableWearTear ?? true;
-      const fuelPricePerLitre = 1.5; // default, will be updated by fuel API
+      const fuelPricePerLitre = 1.5;
 
       const breakdown = calculateJobCost({
         deliveryFee: input.deliveryFee,
@@ -156,6 +170,8 @@ export const jobsRouter = router({
         riskBufferPercent,
         enableTimeValue,
         enableWearTear,
+        travelToJobCost: input.travelToJobCost,
+        travelHomeCost: input.travelHomeCost,
       });
 
       await db.insert(jobs).values({
@@ -180,6 +196,20 @@ export const jobsRouter = router({
         worthItScore: breakdown.worthItScore,
         scheduledPickupAt: input.scheduledPickupAt ? new Date(input.scheduledPickupAt) : undefined,
         routeData: routeInfo?.routeData ?? null,
+        // Travel expenses
+        travelToJobCost: input.travelToJobCost,
+        travelToJobMode: input.travelToJobMode,
+        travelHomePostcode: input.travelHomePostcode ?? null,
+        travelHomeCost: input.travelHomeCost,
+        travelHomeMode: input.travelHomeMode,
+        // Vehicle details
+        vehicleMake: input.vehicleMake ?? null,
+        vehicleModel: input.vehicleModel ?? null,
+        vehicleReg: input.vehicleReg ?? null,
+        vehicleFuelType: input.vehicleFuelType ?? "unknown",
+        vehicleColour: input.vehicleColour ?? null,
+        scannedDistanceMiles: input.scannedDistanceMiles ?? null,
+        scannedDurationMins: input.scannedDurationMins ?? null,
         // Booking metadata
         brokerName: input.brokerName ?? null,
         jobReference: input.jobReference ?? null,

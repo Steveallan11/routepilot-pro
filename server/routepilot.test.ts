@@ -22,6 +22,8 @@ describe("calculateJobCost", () => {
     riskBufferPercent: 10,
     enableTimeValue: true,
     enableWearTear: true,
+    travelToJobCost: 0,
+    travelHomeCost: 0,
   };
 
   it("calculates fuel cost correctly", () => {
