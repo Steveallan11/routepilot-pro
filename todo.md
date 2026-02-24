@@ -355,3 +355,8 @@
 - [x] UI: if saved edits exist, merge them into the fresh plan result (overwrite transport legs)
 - [x] UI: show a toast "Restored your saved edits" when edits are applied
 - [x] UI: setSavedChainId from the loaded chain so Save Edits / Share Plan work immediately
+
+## Bug Fix: Plan Day 404
+- [x] Found: Plan Day was navigating to /tools?chainJobs=... but /tools is not a registered route
+- [x] Fixed: changed navigation target to /chain?chainJobs=... (the correct Chain Planner route)
+- [x] Chain Planner correctly reads ?chainJobs= param and pre-selects those jobs

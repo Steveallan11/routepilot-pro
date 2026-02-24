@@ -1589,7 +1589,7 @@ function PlanDaySheet({ jobs, onClose }: { jobs: Job[]; onClose: () => void }) {
     }
     const ids = Array.from(selectedIds).join(",");
     onClose();
-    window.location.href = `/tools?chainJobs=${ids}`;
+    window.location.href = `/chain?chainJobs=${ids}`;
   }
 
   return (
