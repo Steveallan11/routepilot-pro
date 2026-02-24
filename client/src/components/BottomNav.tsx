@@ -1,5 +1,5 @@
 import { useLocation, Link } from "wouter";
-import { Car, Navigation, History, CalendarDays, Sparkles, LogIn, User } from "lucide-react";
+import { Car, Navigation, History, LayoutDashboard, Trophy, LogIn, User } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { getLoginUrl } from "@/const";
@@ -7,9 +7,9 @@ import { getLoginUrl } from "@/const";
 const navItems = [
   { path: "/", icon: Car, label: "Calculator" },
   { path: "/routes", icon: Navigation, label: "Routes" },
-  { path: "/planner", icon: CalendarDays, label: "Planner" },
+  { path: "/dashboard", icon: LayoutDashboard, label: "Dashboard" },
   { path: "/history", icon: History, label: "History" },
-  { path: "/insights", icon: Sparkles, label: "AI" },
+  { path: "/badges", icon: Trophy, label: "Badges" },
 ];
 
 export default function BottomNav() {

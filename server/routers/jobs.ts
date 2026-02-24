@@ -5,6 +5,7 @@ import { jobs, userSettings } from "../../drizzle/schema";
 import { eq, and, desc } from "drizzle-orm";
 import { makeRequest } from "../_core/map";
 import { calculateJobCost } from "../../shared/routepilot-types";
+import { checkAndAwardBadges } from "../gamification";
 
 const jobInputSchema = z.object({
   pickupPostcode: z.string().min(2).max(10),
@@ -218,6 +219,15 @@ export const jobsRouter = router({
         bookingImageUrl: input.bookingImageUrl ?? null,
         notes: input.notes ?? null,
       });
+
+      // Fire gamification in background (don't block response)
+      checkAndAwardBadges(ctx.user.id, {
+        jobMiles: distanceMiles,
+        jobEarnings: breakdown.grossIncome,
+        profitPerMile: breakdown.profitPerMile,
+        travelHomeMode: input.travelHomeMode,
+        isScanned: !!input.bookingImageUrl,
+      }).catch(e => console.warn("[Gamification]", e));
 
       return { success: true, breakdown, distanceMiles, durationMins };
     }),

@@ -12,6 +12,7 @@ import { shareRouter } from "./routers/share";
 import { scanRouter } from "./routers/scan";
 import { receiptsRouter } from "./routers/receipts";
 import { routesRouter } from "./routers/routes";
+import { dashboardRouter } from "./routers/dashboard";
 
 export const appRouter = router({
   system: systemRouter,
@@ -33,6 +34,7 @@ export const appRouter = router({
   scan: scanRouter,
   receipts: receiptsRouter,
   routes: routesRouter,
+  dashboard: dashboardRouter,
 });
 
 export type AppRouter = typeof appRouter;

@@ -13,6 +13,8 @@ import AIInsights from "./pages/AIInsights";
 import SharedChain from "./pages/SharedChain";
 import SharedRoute from "./pages/SharedRoute";
 import RouteFinder from "./pages/RouteFinder";
+import Dashboard from "./pages/Dashboard";
+import Badges from "./pages/Badges";
 import BottomNav from "./components/BottomNav";
 import { useLocation } from "wouter";
 
@@ -30,6 +32,8 @@ function Router() {
         <Route path="/settings" component={Settings} />
         <Route path="/insights" component={AIInsights} />
         <Route path="/routes">{() => <RouteFinder />}</Route>
+        <Route path="/dashboard" component={Dashboard} />
+        <Route path="/badges" component={Badges} />
         <Route path="/share/:token" component={SharedChain} />
         <Route path="/shared-route/:token" component={SharedRoute} />
         <Route path="/404" component={NotFound} />

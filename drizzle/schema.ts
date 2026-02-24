@@ -234,3 +234,43 @@ export const routeHistory = mysqlTable("route_history", {
 
 export type RouteHistory = typeof routeHistory.$inferSelect;
 export type InsertRouteHistory = typeof routeHistory.$inferInsert;
+
+// ─── Gamification: User Badges ────────────────────────────────────────────────
+
+export const userBadges = mysqlTable("user_badges", {
+  id: int("id").autoincrement().primaryKey(),
+  userId: int("userId").notNull(),
+  badgeId: varchar("badgeId", { length: 50 }).notNull(), // e.g. "first_delivery", "ton_up"
+  awardedAt: timestamp("awardedAt").defaultNow().notNull(),
+  progress: int("progress").default(0).notNull(), // current progress toward badge
+  target: int("target").default(1).notNull(),     // target to unlock
+  unlocked: boolean("unlocked").default(false).notNull(),
+  seenAt: timestamp("seenAt"),                    // null = unseen notification
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type UserBadge = typeof userBadges.$inferSelect;
+export type InsertUserBadge = typeof userBadges.$inferInsert;
+
+// ─── Gamification: User Streaks ───────────────────────────────────────────────
+
+export const userStreaks = mysqlTable("user_streaks", {
+  id: int("id").autoincrement().primaryKey(),
+  userId: int("userId").notNull().unique(),
+  currentStreak: int("currentStreak").default(0).notNull(),   // consecutive working days
+  longestStreak: int("longestStreak").default(0).notNull(),
+  lastJobDate: varchar("lastJobDate", { length: 10 }),        // YYYY-MM-DD
+  totalJobsAllTime: int("totalJobsAllTime").default(0).notNull(),
+  totalMilesAllTime: decimal("totalMilesAllTime", { precision: 12, scale: 2 }).$type<number>().default(0 as unknown as number),
+  totalEarningsAllTime: decimal("totalEarningsAllTime", { precision: 12, scale: 2 }).$type<number>().default(0 as unknown as number),
+  totalTrainTrips: int("totalTrainTrips").default(0).notNull(),
+  totalBusTrips: int("totalBusTrips").default(0).notNull(),
+  totalScans: int("totalScans").default(0).notNull(),
+  totalCitiesVisited: int("totalCitiesVisited").default(0).notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type UserStreak = typeof userStreaks.$inferSelect;
+export type InsertUserStreak = typeof userStreaks.$inferInsert;

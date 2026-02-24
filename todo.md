@@ -121,3 +121,49 @@
 - [x] Shareable route links: generate share token, store route snapshot in DB
 - [x] Shareable route links: public page /shared-route/:token with map, legs, and cost
 - [x] Shareable route links: share button on route result cards
+
+## Feature: Driver Dashboard & Gamification
+
+### Dashboard
+- [ ] DB: dashboard stats procedure (today earnings, week earnings, jobs count, miles, profit/hr)
+- [ ] DB: next planned job query (soonest scheduled job)
+- [ ] Server: dashboard router with stats, next-job, and weekly chart data
+- [ ] Frontend: Dashboard page with hero stats (today £, week £, jobs today, miles today)
+- [ ] Frontend: Weekly earnings bar chart (7-day)
+- [ ] Frontend: Live "Next Job" widget with countdown, route, and travel-to-job button
+- [ ] Frontend: AI Insights panel (3 bullet recommendations, refreshable)
+- [ ] Frontend: Top stats row: best day this week, avg profit/hr, total miles this week
+- [ ] Frontend: Add Dashboard as first tab in bottom nav
+
+### Gamification
+- [ ] DB: user_badges table (userId, badgeId, awardedAt, progress)
+- [ ] DB: user_streaks table (userId, currentStreak, longestStreak, lastJobDate)
+- [ ] Server: badge definitions (20 badges across categories)
+- [ ] Server: checkAndAwardBadges() called on every job save
+- [ ] Server: streak update logic on job save
+- [ ] Frontend: Badges page / section showing all badges (locked/unlocked)
+- [ ] Frontend: Badge unlock toast notification with animation
+- [ ] Frontend: Streak counter widget on dashboard
+- [ ] Frontend: Progress bars on in-progress badges
+
+### Badge Ideas
+- [ ] 🚗 First Delivery — save your first job
+- [ ] 💰 Ton Up — earn £100 in a single day
+- [ ] 🏆 Double Ton — earn £200 in a single day
+- [ ] 📍 Century Driver — complete 100 jobs total
+- [ ] 🛤️ Road Warrior — drive 1,000 miles in a week
+- [ ] 🚂 Train Spotter — use public transport 10 times to reposition
+- [ ] 🌿 Eco Driver — save 50kg CO₂ by taking the train instead of driving back
+- [ ] ⚡ Speed Runner — complete 5 jobs in a single day
+- [ ] 💎 Diamond Driver — maintain 7-day working streak
+- [ ] 🔥 On Fire — 3 consecutive days earning over £100
+- [ ] 🗺️ Explorer — deliver to 10 different UK cities
+- [ ] 🎯 Sharp Shooter — 10 jobs rated "Worth It" in a row
+- [ ] 🌙 Night Owl — complete a job after 10pm
+- [ ] 🌅 Early Bird — start a job before 7am
+- [ ] 🤝 Chain Master — complete a 3-job chain in one day
+- [ ] 📸 Scanner Pro — scan 20 booking screenshots
+- [ ] 💡 Smart Saver — use the cheapest route option 5 times
+- [ ] 🏅 Loyal Driver — use the app for 30 days
+- [ ] 🚀 Profit King — achieve £0.50+ per mile on 5 jobs
+- [ ] 🌟 Legend — earn £1,000 in a single week
