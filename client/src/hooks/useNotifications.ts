@@ -113,6 +113,65 @@ export function useNotifications() {
     }
   }, [hasPermission, requestPermission]);
 
+  // Schedule a "Leave now" alert for a chain based on first leg departure time
+  const scheduleChainLeaveNow = useCallback(async (opts: {
+    chainId: number;
+    fromPostcode: string;
+    firstJobPostcode: string;
+    departureTime: string; // HH:MM string (today's date assumed)
+    firstStepInstruction?: string;
+  }): Promise<boolean> => {
+    try {
+      if (!hasPermission()) {
+        const granted = await requestPermission();
+        if (!granted) return false;
+      }
+
+      // Parse departure time as today's date
+      const [hh, mm] = opts.departureTime.split(":").map(Number);
+      const departureMs = (() => {
+        const d = new Date();
+        d.setHours(hh ?? 0, mm ?? 0, 0, 0);
+        return d.getTime();
+      })();
+
+      const delay = departureMs - Date.now();
+      const tag = `chain-leave-${opts.chainId}`;
+      const body = `Leave ${opts.fromPostcode} now to reach ${opts.firstJobPostcode} on time${opts.firstStepInstruction ? `\nFirst step: ${opts.firstStepInstruction}` : ""}`;
+
+      if (delay <= 0) {
+        // Already at or past departure — fire immediately if within 5 min
+        if (Date.now() - departureMs < 5 * 60 * 1000) {
+          new Notification("🚶 Leave now for your chain!", { body, icon: "/favicon.ico", tag });
+        }
+        return true;
+      }
+
+      // Use service worker if available
+      if (swRef.current?.active) {
+        swRef.current.active.postMessage({
+          type: "SCHEDULE_REMINDER",
+          jobId: opts.chainId,
+          jobTitle: `Leave now for chain: ${opts.fromPostcode} → ${opts.firstJobPostcode}`,
+          pickupTime: new Date(departureMs).toISOString(),
+          travelRoute: null,
+        });
+        return true;
+      }
+
+      // Fallback: setTimeout
+      setTimeout(() => {
+        if (!hasPermission()) return;
+        new Notification("🚶 Leave now for your chain!", { body, icon: "/favicon.ico", tag });
+      }, delay);
+
+      return true;
+    } catch (e) {
+      console.warn("[Reminder] scheduleChainLeaveNow error:", e);
+      return false;
+    }
+  }, [hasPermission, requestPermission]);
+
   // Cancel a scheduled reminder (by closing the notification if shown)
   const cancelJobReminder = useCallback((jobId: number) => {
     if (!("serviceWorker" in navigator)) return;
@@ -128,6 +187,7 @@ export function useNotifications() {
     requestPermission,
     hasPermission,
     scheduleJobReminder,
+    scheduleChainLeaveNow,
     cancelJobReminder,
     isSupported: "Notification" in window && "serviceWorker" in navigator,
   };

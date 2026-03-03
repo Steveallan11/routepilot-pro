@@ -17,7 +17,7 @@ import {
   Fuel, ChevronDown, ChevronUp, Camera, Loader2, Navigation,
   Trash2, TrendingUp, TrendingDown, Receipt, Search, Filter,
   CalendarDays, Route, Image as ImageIcon, StickyNote, Copy, Pencil,
-  Link2, ChevronRight
+  Link2, ChevronRight, Paperclip
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { calculateJobCost } from "../../../shared/routepilot-types";
@@ -1709,7 +1709,7 @@ export default function Jobs({ prefilledDate: initialDate }: { prefilledDate?: s
   const [addJobDate, setAddJobDate] = useState<string | undefined>(effectiveInitialDate);
   const [search, setSearch] = useState("");
   const [showPlanDay, setShowPlanDay] = useState(false);
-  const { scheduleJobReminder } = useNotifications();
+  const { scheduleJobReminder, scheduleChainLeaveNow } = useNotifications();
 
   const { data: jobsData, refetch } = trpc.jobs.list.useQuery(
     { limit: 100 },
@@ -1783,6 +1783,12 @@ export default function Jobs({ prefilledDate: initialDate }: { prefilledDate?: s
 
   const [selectedChainId, setSelectedChainId] = useState<number | null>(null);
   const [chainSlideIndex, setChainSlideIndex] = useState(0);
+
+  // Fetch full chain data (transport legs + notes) when a chain sheet is open
+  const { data: chainDetailData } = trpc.chains.getByChainId.useQuery(
+    { chainId: selectedChainId! },
+    { enabled: selectedChainId != null }
+  );
 
   // Summary stats for current tab
   const totalEarnings = filteredJobs.reduce((s, j) => s + Number(j.deliveryFee), 0);
@@ -2044,6 +2050,36 @@ export default function Jobs({ prefilledDate: initialDate }: { prefilledDate?: s
                     <div className="flex items-center gap-1 px-2 py-0.5 rounded-md bg-primary/15 text-primary text-[10px] font-bold">
                       <Route size={9} /> CHAIN · {cJobs.length} JOBS
                     </div>
+                    {/* Leave Now alert button — only shown if chain has a saved departure time */}
+                    {(() => {
+                      type LegType = { departureTime?: string; fromPostcode?: string; toPostcode?: string; options?: Array<{ departureTime?: string; steps?: Array<{ instruction?: string }> }> };
+                      const legs = (chainDetailData?.chain?.transportLegs as LegType[] | undefined) ?? [];
+                      const firstLeg = legs[0];
+                      const deptTime = firstLeg?.departureTime ?? firstLeg?.options?.[0]?.departureTime;
+                      if (!deptTime || deptTime === "On demand") return null;
+                      const firstStepInstruction = firstLeg?.options?.[0]?.steps?.[0]?.instruction;
+                      const firstJobPostcode = cJobs[0]?.pickupPostcode ?? "";
+                      const fromPostcode = firstLeg?.fromPostcode ?? "";
+                      return (
+                        <button
+                          onClick={async (e) => {
+                            e.stopPropagation();
+                            const ok = await scheduleChainLeaveNow({
+                              chainId: selectedChainId!,
+                              fromPostcode,
+                              firstJobPostcode,
+                              departureTime: deptTime,
+                              firstStepInstruction,
+                            });
+                            if (ok) toast.success(`🚶 Alert set for ${deptTime}`);
+                            else toast.error("Notifications not enabled");
+                          }}
+                          className="flex items-center gap-1 px-2 py-0.5 rounded-md bg-primary/10 text-primary text-[10px] font-bold hover:bg-primary/20 transition-colors"
+                        >
+                          <Clock size={9} /> Leave {deptTime}
+                        </button>
+                      );
+                    })()}
                   </div>
                   <div className="text-right">
                     <span className="text-base font-bold font-mono text-primary">£{fmt(totalFee, 0)}</span>
@@ -2213,6 +2249,35 @@ export default function Jobs({ prefilledDate: initialDate }: { prefilledDate?: s
                 >
                   <Receipt size={14} /> Export Chain P&amp;L (CSV)
                 </Button>
+
+                {/* Chain Notes Summary */}
+                {(() => {
+                  // Collect all reposition leg notes from the saved chain data
+                  type LegWithNotes = { notes?: string | null; fromPostcode?: string; toPostcode?: string };
+                  const legs: LegWithNotes[] = (chainDetailData?.chain?.transportLegs as LegWithNotes[] | undefined) ?? [];
+                  const legsWithNotes = legs.filter(l => l.notes && l.notes.trim());
+                  if (legsWithNotes.length === 0) return null;
+                  return (
+                    <div className="mt-4 bg-secondary/40 border border-border/50 rounded-xl p-3">
+                      <div className="flex items-center gap-2 mb-2">
+                        <Paperclip size={13} className="text-muted-foreground" />
+                        <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Reposition Notes</span>
+                      </div>
+                      <div className="space-y-2">
+                        {legsWithNotes.map((leg, i) => (
+                          <div key={i} className="text-sm">
+                            {(leg.fromPostcode || leg.toPostcode) && (
+                              <div className="text-[10px] text-muted-foreground font-mono mb-0.5">
+                                {leg.fromPostcode} → {leg.toPostcode}
+                              </div>
+                            )}
+                            <p className="text-foreground/80 whitespace-pre-wrap leading-snug">{leg.notes}</p>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })()}
               </div>
             </SheetContent>
           </Sheet>

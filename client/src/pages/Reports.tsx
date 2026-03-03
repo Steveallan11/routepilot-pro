@@ -294,7 +294,7 @@ export default function Reports() {
         </div>
 
         {/* Additional stats */}
-        <div className="grid grid-cols-2 gap-2">
+        <div className="grid grid-cols-3 gap-2">
           <div className="bg-card rounded-xl p-3 border border-border flex items-center gap-3">
             <Car size={16} className="text-muted-foreground shrink-0" />
             <div>
@@ -307,6 +307,24 @@ export default function Reports() {
             <div>
               <div className="text-[10px] text-muted-foreground">Costs</div>
               <div className="text-sm font-bold font-mono text-destructive">{isLoading ? "…" : `£${fmt(totals?.costs ?? 0, 0)}`}</div>
+            </div>
+          </div>
+          <div className="bg-card rounded-xl p-3 border border-border flex items-center gap-3">
+            <Route size={16} className="text-muted-foreground shrink-0" />
+            <div>
+              <div className="text-[10px] text-muted-foreground">£/mile</div>
+              <div className={cn(
+                "text-sm font-bold font-mono",
+                !isLoading && (totals?.miles ?? 0) > 0
+                  ? ((totals?.netProfit ?? 0) / (totals?.miles ?? 1)) >= 0.5
+                    ? "text-primary"
+                    : "text-yellow-400"
+                  : ""
+              )}>
+                {isLoading ? "…" : (totals?.miles ?? 0) > 0
+                  ? `£${fmt((totals!.netProfit) / (totals!.miles), 2)}`
+                  : "—"}
+              </div>
             </div>
           </div>
         </div>
