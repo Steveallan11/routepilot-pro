@@ -390,3 +390,19 @@
 - [x] UI Calendar: ChainCard now tappable — opens same swipeable P&L sheet
 - [x] UI Calendar: slide navigation in calendar chain sheet
 - [x] UI Calendar: Complete/Delete buttons still work (stopPropagation on tap)
+
+## Feature: Step Departure/Arrival Cascade
+- [x] UI: when any step duration changes, recalculate departure/arrival times for all subsequent steps
+- [x] UI: departure/arrival times cascade from leg's base departureTimestampSecs
+- [x] UI: leg total time updates instantly when step durations change
+
+## Feature: Reposition Cost Alert Badge
+- [x] UI: calculate cost-to-fee ratio for each reposition leg (transport cost / next job fee)
+- [x] UI: show yellow warning badge on leg if ratio > 20% with exact percentage shown
+- [x] UI: nextJobFee passed from buildTimeline through TransportLegCard
+
+## Feature: Chain P&L CSV Export
+- [x] UI Jobs: "Export Chain P&L (CSV)" button in chain swipeable sheet
+- [x] UI Calendar: "Export Chain P&L (CSV)" button in calendar chain sheet
+- [x] CSV columns: Job, Route, Date, Fee, Fuel, Transport, Net Profit, Miles, Broker, Vehicle
+- [x] File downloads as chain-pl-YYYY-MM-DD.csv (client-side Blob, no server round-trip)

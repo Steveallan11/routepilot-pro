@@ -793,10 +793,39 @@ function ChainCard({ chain, jobs, onRefresh }: { chain: ChainEntry; jobs: Job[];
                 {currentJob.vehicleReg && (
                   <div className="flex items-center gap-2 text-muted-foreground">
                     <Car size={13} />
-                    <span>{[currentJob.vehicleMake, currentJob.vehicleModel, currentJob.vehicleReg].filter(Boolean).join(" · ")}</span>
+                    <span>{[currentJob.vehicleMake, currentJob.vehicleModel, currentJob.vehicleReg].filter(Boolean).join(" \u00b7 ")}</span>
                   </div>
                 )}
               </div>
+              {/* CSV Export */}
+              <button
+                className="w-full mt-4 flex items-center justify-center gap-2 text-xs text-muted-foreground border border-dashed border-border rounded-lg py-2 hover:text-foreground hover:border-border/80 transition-colors"
+                onClick={() => {
+                  const headers = ["Job", "Route", "Date", "Fee (\u00a3)", "Fuel (\u00a3)", "Transport (\u00a3)", "Net Profit (\u00a3)", "Miles", "Broker", "Vehicle"];
+                  const rows = chainJobs.map((j, i) => [
+                    `Job ${i + 1}`,
+                    `${j.pickupPostcode} to ${j.dropoffPostcode}`,
+                    j.scheduledPickupAt ? new Date(Number(j.scheduledPickupAt)).toLocaleDateString("en-GB") : "",
+                    Number(j.deliveryFee).toFixed(2),
+                    Number(j.estimatedFuelCost ?? 0).toFixed(2),
+                    Number(j.travelToJobCost ?? 0).toFixed(2),
+                    Number(j.actualNetProfit ?? j.estimatedNetProfit ?? 0).toFixed(2),
+                    Number(j.estimatedDistanceMiles ?? 0).toFixed(1),
+                    j.brokerName ?? "",
+                    [j.vehicleMake, j.vehicleModel, j.vehicleReg].filter(Boolean).join(" "),
+                  ]);
+                  const csv = [headers, ...rows].map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(",")).join("\n");
+                  const blob = new Blob([csv], { type: "text/csv" });
+                  const url = URL.createObjectURL(blob);
+                  const a = document.createElement("a");
+                  a.href = url;
+                  a.download = `chain-pl-${new Date().toISOString().slice(0, 10)}.csv`;
+                  a.click();
+                  URL.revokeObjectURL(url);
+                }}
+              >
+                Export Chain P&amp;L (CSV)
+              </button>
             </div>
           )}
         </SheetContent>

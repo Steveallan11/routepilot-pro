@@ -371,6 +371,7 @@ function TransportLegCard({
   leg,
   legIndex,
   label,
+  nextJobFee,
   onSelectOption,
   onEditLeg,
   onDeleteLeg,
@@ -379,6 +380,7 @@ function TransportLegCard({
   leg: TransportLeg;
   legIndex: number;
   label: string;
+  nextJobFee?: number;
   onSelectOption: (legIndex: number, optionIndex: number) => void;
   onEditLeg?: (legIndex: number, cost: number, mode: string, durationMins: number) => void;
   onDeleteLeg?: (legIndex: number) => void;
@@ -479,6 +481,14 @@ function TransportLegCard({
             )}
           </div>
         </button>
+
+        {/* Cost alert badge — shown when transport cost > 20% of next job fee */}
+        {nextJobFee && nextJobFee > 0 && (displayCost / nextJobFee) > 0.2 && (
+          <div className="flex items-center gap-1.5 text-xs text-yellow-400 bg-yellow-400/10 rounded-lg px-2 py-1 mt-1">
+            <AlertTriangle size={11} />
+            <span>Transport cost is {Math.round((displayCost / nextJobFee) * 100)}% of next job fee (£{fmt(nextJobFee, 0)})</span>
+          </div>
+        )}
 
         {/* Action row */}
         <div className="flex gap-1.5 mt-1 flex-wrap">
@@ -1036,6 +1046,17 @@ export default function ChainPlanner() {
     toast.success("Leg removed");
   };
 
+  // Cascade departure/arrival times through all steps given a base departure timestamp
+  function cascadeStepTimes(steps: TransitStep[], baseSecs: number): TransitStep[] {
+    let cursor = baseSecs;
+    return steps.map(st => {
+      const dep = new Date(cursor * 1000).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", hour12: false });
+      cursor += (st.durationMins ?? 0) * 60;
+      const arr = new Date(cursor * 1000).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", hour12: false });
+      return { ...st, departureTime: dep, arrivalTime: arr };
+    });
+  }
+
   // Edit individual steps within a transport leg
   const handleEditSteps = (legIndex: number, newSteps: TransitStep[]) => {
     setChainResult(prev => {
@@ -1049,11 +1070,14 @@ export default function ChainPlanner() {
         const newCostFromSteps = stepsHaveCost
           ? newSteps.reduce((s, st) => s + (st.cost ?? STEP_MODE_COSTS[st.mode] ?? 0), 0)
           : null;
+        // Cascade departure/arrival times through steps
+        const baseSecs = leg.departureTimestampSecs ?? 0;
+        const cascadedSteps = baseSecs > 0 ? cascadeStepTimes(newSteps, baseSecs) : newSteps;
         const updatedOptions = leg.options.map((opt, oi) =>
           oi === leg.selectedOptionIndex
             ? {
                 ...opt,
-                steps: newSteps,
+                steps: cascadedSteps,
                 durationMins: newDurationMins > 0 ? newDurationMins : opt.durationMins,
                 cost: newCostFromSteps !== null ? newCostFromSteps : opt.cost,
               }
@@ -1242,7 +1266,7 @@ export default function ChainPlanner() {
   const buildTimeline = (result: ChainResult) => {
     const items: Array<
       | { type: "homeStart"; postcode: string }
-      | { type: "transport"; leg: TransportLeg; legIndex: number; label: string }
+      | { type: "transport"; leg: TransportLeg; legIndex: number; label: string; nextJobFee?: number }
       | { type: "drive"; job: ChainJob; jobIndex: number; travelLeg?: TransportLeg }
       | { type: "homeEnd"; postcode: string }
     > = [];
@@ -1257,7 +1281,8 @@ export default function ChainPlanner() {
     // Home → first pickup transport leg
     const homeToPickup = result.transportLegs.find(l => l.legType === "homeToPickup");
     if (homeToPickup) {
-      items.push({ type: "transport", leg: homeToPickup, legIndex: transportLegIndex++, label: "Travel to first pickup" });
+      const firstJobFee = result.jobs[0] ? Number(result.jobs[0].deliveryFee) : undefined;
+      items.push({ type: "transport", leg: homeToPickup, legIndex: transportLegIndex++, label: "Travel to first pickup", nextJobFee: firstJobFee });
     }
 
     // For each job: drive leg, then reposition (if not last)
@@ -1269,7 +1294,8 @@ export default function ChainPlanner() {
       if (i < result.jobs.length - 1) {
         const repoLeg = result.transportLegs.find((l, li) => l.legType === "reposition" && li === transportLegIndex);
         if (repoLeg) {
-          items.push({ type: "transport", leg: repoLeg, legIndex: transportLegIndex++, label: `Reposition to Job ${i + 2}` });
+          const nextJobFee = result.jobs[i + 1] ? Number(result.jobs[i + 1]!.deliveryFee) : undefined;
+          items.push({ type: "transport", leg: repoLeg, legIndex: transportLegIndex++, label: `Reposition to Job ${i + 2}`, nextJobFee });
           lastTransportLeg = repoLeg;
         }
       }
@@ -1461,6 +1487,7 @@ export default function ChainPlanner() {
                           leg={item.leg}
                           legIndex={item.legIndex}
                           label={item.label}
+                          nextJobFee={item.nextJobFee}
                           onSelectOption={handleSelectOption}
                           onEditLeg={handleEditLeg}
                           onDeleteLeg={handleDeleteLeg}

@@ -2135,6 +2135,37 @@ export default function Jobs({ prefilledDate: initialDate }: { prefilledDate?: s
                 >
                   <ChevronRight size={14} /> Open Full Job Detail
                 </Button>
+                {/* CSV Export */}
+                <Button
+                  variant="outline"
+                  className="w-full mt-2 gap-2 text-muted-foreground"
+                  onClick={() => {
+                    const headers = ["Job", "Route", "Date", "Fee", "Fuel", "Transport", "Net Profit", "Miles", "Broker", "Vehicle"];
+                    const rows = cJobs.map((j, i) => [
+                      `Job ${i + 1}`,
+                      `${j.pickupPostcode} → ${j.dropoffPostcode}`,
+                      j.scheduledPickupAt ? new Date(Number(j.scheduledPickupAt)).toLocaleDateString("en-GB") : "",
+                      `£${fmt(j.deliveryFee, 2)}`,
+                      `£${fmt(j.estimatedFuelCost ?? 0, 2)}`,
+                      `£${fmt(j.travelToJobCost ?? 0, 2)}`,
+                      `£${fmt(j.actualNetProfit ?? j.estimatedNetProfit ?? 0, 2)}`,
+                      fmt(j.estimatedDistanceMiles ?? 0, 1),
+                      j.brokerName ?? "",
+                      [j.vehicleMake, j.vehicleModel, j.vehicleReg].filter(Boolean).join(" "),
+                    ]);
+                    const csv = [headers, ...rows].map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(",")).join("\n");
+                    const blob = new Blob([csv], { type: "text/csv" });
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement("a");
+                    a.href = url;
+                    a.download = `chain-pl-${new Date().toISOString().slice(0, 10)}.csv`;
+                    a.click();
+                    URL.revokeObjectURL(url);
+                    toast.success("P&L exported as CSV");
+                  }}
+                >
+                  <Receipt size={14} /> Export Chain P&amp;L (CSV)
+                </Button>
               </div>
             </SheetContent>
           </Sheet>
