@@ -1726,6 +1726,14 @@ export default function Jobs({ prefilledDate: initialDate }: { prefilledDate?: s
     onSuccess: () => { refetch(); toast.success("Job duplicated!"); },
     onError: () => toast.error("Failed to duplicate job"),
   });
+  const markChainDoneMutation = trpc.jobs.markChainDone.useMutation({
+    onSuccess: (data) => {
+      refetch();
+      setSelectedChainId(null);
+      toast.success(`${data.updated} job${data.updated !== 1 ? 's' : ''} marked as done`);
+    },
+    onError: () => toast.error("Failed to mark chain as done"),
+  });
 
   const allJobs = (jobsData?.jobs ?? []) as Job[];
 
@@ -2135,6 +2143,21 @@ export default function Jobs({ prefilledDate: initialDate }: { prefilledDate?: s
                 >
                   <ChevronRight size={14} /> Open Full Job Detail
                 </Button>
+                {/* Mark All Done */}
+                {cJobs.some(j => j.status !== 'completed') && (
+                  <Button
+                    variant="default"
+                    className="w-full mt-4 gap-2 bg-primary text-primary-foreground"
+                    disabled={markChainDoneMutation.isPending}
+                    onClick={() => {
+                      if (selectedChainId != null) {
+                        markChainDoneMutation.mutate({ chainId: selectedChainId });
+                      }
+                    }}
+                  >
+                    <CheckCircle2 size={14} /> {markChainDoneMutation.isPending ? "Marking done…" : "Mark all jobs done"}
+                  </Button>
+                )}
                 {/* CSV Export */}
                 <Button
                   variant="outline"

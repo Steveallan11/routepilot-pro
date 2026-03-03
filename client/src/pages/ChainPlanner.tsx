@@ -168,6 +168,7 @@ type TransportLeg = {
   selectedOptionIndex: number;
   noTransitZone: boolean;
   departureTimestampSecs?: number;
+  notes?: string;
 };
 
 type ChainJob = {
@@ -388,7 +389,7 @@ function TransportLegCard({
   onSelectOption: (legIndex: number, optionIndex: number) => void;
   onEditLeg?: (legIndex: number, cost: number, mode: string, durationMins: number) => void;
   onDeleteLeg?: (legIndex: number) => void;
-  onEditSteps?: (legIndex: number, steps: TransitStep[]) => void;
+  onEditSteps?: (legIndex: number, steps: TransitStep[], notes?: string) => void;
 }) {
   const [expanded, setExpanded] = useState(false);
   const [showOptions, setShowOptions] = useState(false);
@@ -601,6 +602,16 @@ function TransportLegCard({
             >
               <Plus size={11} /> Add step
             </button>
+            {/* Leg notes */}
+            <div className="mt-3 border-t border-border/30 pt-3">
+              <p className="text-[10px] text-muted-foreground font-semibold mb-1.5 uppercase tracking-wide">Notes</p>
+              <textarea
+                className="w-full bg-background/60 border border-border/50 rounded-lg px-3 py-2 text-xs text-foreground placeholder:text-muted-foreground/50 resize-none focus:outline-none focus:ring-1 focus:ring-primary/40 min-h-[60px]"
+                placeholder="e.g. parking at Temple Meads £3, taxi booked with John..."
+                value={leg.notes ?? ""}
+                onChange={e => onEditSteps?.(legIndex, steps, e.target.value)}
+              />
+            </div>
           </div>
         )}
       </div>
@@ -1074,7 +1085,7 @@ export default function ChainPlanner() {
   }
 
   // Edit individual steps within a transport leg
-  const handleEditSteps = (legIndex: number, newSteps: TransitStep[]) => {
+  const handleEditSteps = (legIndex: number, newSteps: TransitStep[], notes?: string) => {
     setChainResult(prev => {
       if (!prev) return prev;
       const updatedLegs = prev.transportLegs.map((leg, i) => {
@@ -1099,7 +1110,7 @@ export default function ChainPlanner() {
               }
             : opt
         );
-        return { ...leg, options: updatedOptions };
+        return { ...leg, options: updatedOptions, notes: notes !== undefined ? notes : leg.notes };
       });
       // Recalculate totals
       let totalTransportCost = 0;

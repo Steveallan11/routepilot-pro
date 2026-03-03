@@ -2,7 +2,7 @@ import { useLocation, Link } from "wouter";
 import {
   LayoutDashboard, CalendarDays, Briefcase, Wrench, User, LogIn,
   Camera, Fuel, FileText, TrendingUp, Users, Trophy, Zap, Crown,
-  Bell, Navigation, Link2, MoreHorizontal
+  Bell, Navigation, Link2, MoreHorizontal, BarChart3
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/_core/hooks/useAuth";
@@ -29,6 +29,7 @@ const toolItems = [
   { path: "/tax-export", icon: FileText, label: "Tax Export" },
   { path: "/brokers", icon: TrendingUp, label: "Brokers" },
   { path: "/lifts", icon: Users, label: "Lifts" },
+  { path: "/reports", icon: BarChart3, label: "P&L Report" },
 ];
 
 // ─── Me drawer items ──────────────────────────────────────────────────────────

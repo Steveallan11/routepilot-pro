@@ -529,4 +529,87 @@ export const jobsRouter = router({
 
       return { success: true, breakdown, distanceMiles, durationMins };
     }),
+
+  // Mark all jobs in a chain as completed in one tap
+  markChainDone: protectedProcedure
+    .input(z.object({ chainId: z.number() }))
+    .mutation(async ({ ctx, input }) => {
+      const db = await getDb();
+      if (!db) throw new Error("Database unavailable");
+      const chainJobRows = await db
+        .select({ jobId: chainJobs.jobId })
+        .from(chainJobs)
+        .where(eq(chainJobs.chainId, input.chainId));
+      const jobIds = chainJobRows.map(r => r.jobId);
+      if (jobIds.length === 0) return { updated: 0 };
+      const now = new Date();
+      await db
+        .update(jobs)
+        .set({ status: "completed", completedAt: now })
+        .where(and(inArray(jobs.id, jobIds), eq(jobs.userId, ctx.user.id)));
+      return { updated: jobIds.length };
+    }),
+
+  // Weekly P&L report
+  weeklyReport: protectedProcedure
+    .input(z.object({
+      weekStart: z.string(),
+      weekEnd: z.string(),
+    }))
+    .query(async ({ ctx, input }) => {
+      const db = await getDb();
+      if (!db) return { days: [], jobs: [], totals: { earnings: 0, costs: 0, netProfit: 0, miles: 0, jobCount: 0 } };
+      const { gte, lte } = await import("drizzle-orm");
+      const start = new Date(input.weekStart);
+      const end = new Date(input.weekEnd);
+      end.setHours(23, 59, 59, 999);
+      const allJobs = await db
+        .select()
+        .from(jobs)
+        .where(and(
+          eq(jobs.userId, ctx.user.id),
+          gte(jobs.scheduledPickupAt, start),
+          lte(jobs.scheduledPickupAt, end),
+        ))
+        .orderBy(jobs.scheduledPickupAt);
+      // Build daily breakdown Mon-Sun
+      const days: Record<string, { date: string; earnings: number; costs: number; netProfit: number; jobCount: number }> = {};
+      for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
+        const key = d.toISOString().slice(0, 10);
+        days[key] = { date: key, earnings: 0, costs: 0, netProfit: 0, jobCount: 0 };
+      }
+      let totalEarnings = 0, totalCosts = 0, totalNet = 0, totalMiles = 0;
+      const jobRows = allJobs.map(j => {
+        const fee = Number(j.deliveryFee ?? 0);
+        const fuel = Number(j.estimatedFuelCost ?? 0);
+        const transport = Number(j.travelToJobCost ?? 0);
+        const net = Number(j.actualNetProfit ?? j.estimatedNetProfit ?? 0);
+        const costs = fuel + transport;
+        const dateKey = j.scheduledPickupAt ? new Date(j.scheduledPickupAt).toISOString().slice(0, 10) : null;
+        if (dateKey && days[dateKey]) {
+          days[dateKey]!.earnings += fee;
+          days[dateKey]!.costs += costs;
+          days[dateKey]!.netProfit += net;
+          days[dateKey]!.jobCount += 1;
+        }
+        totalEarnings += fee;
+        totalCosts += costs;
+        totalNet += net;
+        totalMiles += Number(j.estimatedDistanceMiles ?? 0);
+        return {
+          id: j.id,
+          route: `${j.pickupPostcode} \u2192 ${j.dropoffPostcode}`,
+          date: j.scheduledPickupAt ? new Date(j.scheduledPickupAt).toISOString().slice(0, 10) : null,
+          fee, fuel, transport, net,
+          miles: Number(j.estimatedDistanceMiles ?? 0),
+          broker: j.brokerName ?? "",
+          status: j.status,
+        };
+      });
+      return {
+        days: Object.values(days),
+        jobs: jobRows,
+        totals: { earnings: totalEarnings, costs: totalCosts, netProfit: totalNet, miles: totalMiles, jobCount: allJobs.length },
+      };
+    }),
 });

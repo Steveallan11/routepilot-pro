@@ -411,3 +411,22 @@
 - [x] Red alert badge on reposition leg when transport cost > 40% of next job fee (red) vs > 20% (yellow)
 - [x] CSV export: TOTAL row at bottom with sum of fee, fuel, transport, net profit, miles (Jobs + Calendar)
 - [x] Step card display mode: departure time shown as green pill badge (e.g. "10:48") when cascade is active
+
+## Feature: Mark Chain as Complete
+- [x] Jobs chain sheet: "Mark all jobs done" button sets all chained jobs to status=done
+- [x] Calendar chain sheet: same "Mark all done" button
+- [x] Server: jobs.markChainDone procedure — batch update job statuses by chainId
+- [x] UI: toast confirmation, refresh jobs list after marking done
+
+## Feature: Weekly P&L Report
+- [x] New /reports page with weekly bar chart (earnings, costs, net profit per week)
+- [x] Week selector to navigate between weeks
+- [x] Per-job breakdown table for selected week
+- [x] CSV export for selected week
+- [x] Register /reports route in App.tsx and add to nav via Tools drawer
+
+## Feature: Reposition Leg Notes
+- [x] Add notes field to TransportLeg type
+- [x] Add notes textarea to TransportLegCard expanded view (inside expanded steps panel)
+- [x] Persist notes in transportLegs JSON when saving chain edits (handleEditSteps accepts notes param)
+- [x] Notes saved with chain when Save Edits is clicked

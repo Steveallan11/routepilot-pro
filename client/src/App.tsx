@@ -26,6 +26,7 @@ import Notifications from "./pages/Notifications";
 import Subscription from "./pages/Subscription";
 import Calendar from "./pages/Calendar";
 import Jobs from "./pages/Jobs";
+import Reports from "./pages/Reports";
 import { useLocation } from "wouter";
 
 function Router() {
@@ -57,6 +58,9 @@ function Router() {
         <Route path="/tax-export" component={TaxExport} />
         <Route path="/brokers" component={Brokers} />
         <Route path="/lifts" component={Lifts} />
+
+        {/* Reports */}
+        <Route path="/reports" component={Reports} />
 
         {/* Me (accessible from Me drawer) */}
         <Route path="/notifications" component={Notifications} />

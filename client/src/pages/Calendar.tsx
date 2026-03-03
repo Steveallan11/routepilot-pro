@@ -12,6 +12,7 @@ import {
   Hash, FileText, Fuel, TrendingDown, Navigation, Plus
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { toast } from "sonner";
 import { useLocation } from "wouter";
 
 type ViewMode = "day" | "week" | "month";
@@ -636,6 +637,16 @@ function ChainCard({ chain, jobs, onRefresh }: { chain: ChainEntry; jobs: Job[];
       onRefresh();
     },
   });
+  const markChainDoneMutation = trpc.jobs.markChainDone.useMutation({
+    onSuccess: (data) => {
+      utils.jobs.list.invalidate();
+      utils.chains.listWithJobs.invalidate();
+      onRefresh();
+      setOpen(false);
+      toast.success(`${data.updated} job${data.updated !== 1 ? 's' : ''} marked as done`);
+    },
+    onError: () => toast.error("Failed to mark chain as done"),
+  });
 
   const transportCost = chain.totalCosts ?? 0;
   const currentJob = chainJobs[slideIndex];
@@ -797,6 +808,16 @@ function ChainCard({ chain, jobs, onRefresh }: { chain: ChainEntry; jobs: Job[];
                   </div>
                 )}
               </div>
+              {/* Mark All Done */}
+              {chainJobs.some(j => j.status !== 'completed') && (
+                <button
+                  className="w-full mt-3 py-2.5 rounded-xl bg-primary text-primary-foreground text-sm font-semibold flex items-center justify-center gap-2 disabled:opacity-60"
+                  disabled={markChainDoneMutation.isPending}
+                  onClick={() => markChainDoneMutation.mutate({ chainId: chain.id })}
+                >
+                  <CheckCircle2 size={14} /> {markChainDoneMutation.isPending ? "Marking done…" : "Mark all jobs done"}
+                </button>
+              )}
               {/* CSV Export */}
               <button
                 className="w-full mt-4 flex items-center justify-center gap-2 text-xs text-muted-foreground border border-dashed border-border rounded-lg py-2 hover:text-foreground hover:border-border/80 transition-colors"
