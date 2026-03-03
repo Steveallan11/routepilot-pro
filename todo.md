@@ -430,3 +430,8 @@
 - [x] Add notes textarea to TransportLegCard expanded view (inside expanded steps panel)
 - [x] Persist notes in transportLegs JSON when saving chain edits (handleEditSteps accepts notes param)
 - [x] Notes saved with chain when Save Edits is clicked
+
+## Improvement: Reports Monthly View + Leg Notes Header + Chain Done Badge
+- [ ] Reports page: add month/week toggle; month view shows 4-week bar chart and monthly totals
+- [ ] Reposition leg header: show paperclip icon + first line of notes when notes are set (collapsed state)
+- [ ] Jobs list chain group card: show green "Done" badge when all jobs in chain are status=done

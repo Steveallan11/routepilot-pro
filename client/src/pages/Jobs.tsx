@@ -1930,11 +1930,17 @@ export default function Jobs({ prefilledDate: initialDate }: { prefilledDate?: s
               const pickupTime = firstJob.scheduledPickupAt
                 ? new Date(Number(firstJob.scheduledPickupAt)).toLocaleString("en-GB", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })
                 : null;
+              const allChainDone = chainJobs.every(j => j.status === "completed");
               return (
                 <button
                   key={`chain-${entry.chainId}`}
                   onClick={() => { setSelectedChainId(entry.chainId); setChainSlideIndex(0); }}
-                  className="w-full text-left bg-card border-2 border-primary/30 rounded-2xl p-4 hover:border-primary/60 transition-colors"
+                  className={cn(
+                    "w-full text-left bg-card border-2 rounded-2xl p-4 transition-colors",
+                    allChainDone
+                      ? "border-primary/60 hover:border-primary"
+                      : "border-primary/30 hover:border-primary/60"
+                  )}
                 >
                   <div className="flex items-start justify-between gap-3">
                     <div className="flex-1 min-w-0">
@@ -1942,6 +1948,11 @@ export default function Jobs({ prefilledDate: initialDate }: { prefilledDate?: s
                         <div className="flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-primary/15 text-primary text-[10px] font-bold">
                           <Route size={9} /> CHAIN {chainJobs.length} JOBS
                         </div>
+                        {allChainDone && (
+                          <span className="flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-primary/20 text-primary text-[10px] font-bold">
+                            <CheckCircle2 size={9} /> DONE
+                          </span>
+                        )}
                       </div>
                       <p className="text-base font-bold text-foreground truncate">
                         {firstJob.pickupPostcode} → {lastJob.dropoffPostcode}

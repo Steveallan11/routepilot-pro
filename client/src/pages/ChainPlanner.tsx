@@ -10,7 +10,7 @@ import { getLoginUrl } from "@/const";
 import {
   Link2, Plus, Trash2, ArrowRight, Train, Bus, Car, Footprints,
   AlertTriangle, TrendingUp, Clock, MapPin, PoundSterling, Save,
-  ChevronDown, ChevronUp, Home, Navigation, Check, Settings, CalendarPlus
+  ChevronDown, ChevronUp, Home, Navigation, Check, Settings, CalendarPlus, Paperclip
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
@@ -476,6 +476,13 @@ function TransportLegCard({
                   <span className={cn("flex items-center gap-1 text-xs font-semibold", modeColors[selectedOpt.mode] ?? "text-foreground")}>
                     {modeIcons[selectedOpt.mode]}
                     {selectedOpt.mode}
+                  </span>
+                )}
+                {/* Notes preview when collapsed */}
+                {!expanded && leg.notes && leg.notes.trim() && (
+                  <span className="flex items-center gap-1 text-[10px] text-muted-foreground max-w-[140px]">
+                    <Paperclip size={9} className="shrink-0" />
+                    <span className="truncate">{leg.notes.split('\n')[0].slice(0, 32)}{leg.notes.split('\n')[0].length > 32 ? '…' : ''}</span>
                   </span>
                 )}
                 <span className="text-xs text-muted-foreground">{Math.round(totalDurationMins)} min</span>
