@@ -3,10 +3,11 @@ import { trpc } from "@/lib/trpc";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
 import { getLoginUrl } from "@/const";
 import {
   ChevronLeft, ChevronRight, TrendingUp, PoundSterling,
-  Car, Download, BarChart3, Calendar, Route
+  Car, Download, BarChart3, Calendar, Route, Target, Pencil, Check
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
@@ -156,6 +157,12 @@ export default function Reports() {
     weekStart: rangeStart.toISOString().slice(0, 10),
     weekEnd: rangeEnd.toISOString().slice(0, 10),
   }, { enabled: isAuthenticated });
+
+  // £/mile target
+  const { data: settingsData, refetch: refetchSettings } = trpc.settings.get.useQuery(undefined, { enabled: isAuthenticated });
+  const upsertSettings = trpc.settings.upsert.useMutation({ onSuccess: () => refetchSettings() });
+  const [editingTarget, setEditingTarget] = useState(false);
+  const [targetInput, setTargetInput] = useState("");
 
   const maxVal = useMemo(() => {
     if (!data?.days) return 100;
@@ -311,12 +318,12 @@ export default function Reports() {
           </div>
           <div className="bg-card rounded-xl p-3 border border-border flex items-center gap-3">
             <Route size={16} className="text-muted-foreground shrink-0" />
-            <div>
+            <div className="flex-1 min-w-0">
               <div className="text-[10px] text-muted-foreground">£/mile</div>
               <div className={cn(
                 "text-sm font-bold font-mono",
                 !isLoading && (totals?.miles ?? 0) > 0
-                  ? ((totals?.netProfit ?? 0) / (totals?.miles ?? 1)) >= 0.5
+                  ? ((totals?.netProfit ?? 0) / (totals?.miles ?? 1)) >= (settingsData?.ppmTarget ?? 0.5)
                     ? "text-primary"
                     : "text-yellow-400"
                   : ""
@@ -328,6 +335,87 @@ export default function Reports() {
             </div>
           </div>
         </div>
+
+        {/* £/mile target progress bar */}
+        {isAuthenticated && (totals?.miles ?? 0) > 0 && (
+          <div className="bg-card rounded-xl p-3 border border-border">
+            <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center gap-1.5">
+                <Target size={13} className="text-muted-foreground" />
+                <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">£/mile target</span>
+              </div>
+              {!editingTarget ? (
+                <button
+                  onClick={() => { setTargetInput(String(settingsData?.ppmTarget ?? 0.5)); setEditingTarget(true); }}
+                  className="flex items-center gap-1 text-[10px] text-muted-foreground hover:text-foreground transition-colors"
+                >
+                  <Pencil size={10} /> {settingsData?.ppmTarget != null ? `£${fmt(Number(settingsData.ppmTarget), 2)}/mi` : "Set target"}
+                </button>
+              ) : (
+                <div className="flex items-center gap-1">
+                  <span className="text-[10px] text-muted-foreground">£</span>
+                  <Input
+                    type="number"
+                    step="0.05"
+                    min="0"
+                    max="10"
+                    value={targetInput}
+                    onChange={e => setTargetInput(e.target.value)}
+                    className="h-6 w-16 text-[11px] px-1.5 py-0"
+                    autoFocus
+                    onKeyDown={e => {
+                      if (e.key === "Enter") {
+                        const v = parseFloat(targetInput);
+                        if (!isNaN(v) && v >= 0) {
+                          upsertSettings.mutate({ ppmTarget: v });
+                          toast.success(`Target set to £${fmt(v, 2)}/mi`);
+                        }
+                        setEditingTarget(false);
+                      } else if (e.key === "Escape") {
+                        setEditingTarget(false);
+                      }
+                    }}
+                  />
+                  <button
+                    onClick={() => {
+                      const v = parseFloat(targetInput);
+                      if (!isNaN(v) && v >= 0) {
+                        upsertSettings.mutate({ ppmTarget: v });
+                        toast.success(`Target set to £${fmt(v, 2)}/mi`);
+                      }
+                      setEditingTarget(false);
+                    }}
+                    className="p-0.5 rounded text-primary hover:bg-primary/10"
+                  >
+                    <Check size={12} />
+                  </button>
+                </div>
+              )}
+            </div>
+            {(() => {
+              const target = Number(settingsData?.ppmTarget ?? 0.5);
+              const actual = (totals?.miles ?? 0) > 0 ? (totals!.netProfit) / (totals!.miles) : 0;
+              const pct = target > 0 ? Math.min(100, Math.round((actual / target) * 100)) : 0;
+              const isOnTarget = actual >= target;
+              return (
+                <div>
+                  <div className="w-full bg-secondary rounded-full h-2 overflow-hidden">
+                    <div
+                      className={cn("h-2 rounded-full transition-all", isOnTarget ? "bg-primary" : "bg-yellow-400")}
+                      style={{ width: `${pct}%` }}
+                    />
+                  </div>
+                  <div className="flex justify-between mt-1">
+                    <span className="text-[10px] text-muted-foreground">£{fmt(actual, 2)}/mi actual</span>
+                    <span className={cn("text-[10px] font-semibold", isOnTarget ? "text-primary" : "text-yellow-400")}>
+                      {pct}% of £{fmt(target, 2)}/mi target
+                    </span>
+                  </div>
+                </div>
+              );
+            })()}
+          </div>
+        )}
 
         {/* Bar chart */}
         <div className="bg-card rounded-xl p-4 border border-border relative">

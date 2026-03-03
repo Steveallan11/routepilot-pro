@@ -147,19 +147,20 @@ export function useNotifications() {
         return true;
       }
 
-      // Use service worker if available
+      // Use service worker if available — sends SCHEDULE_CHAIN_LEAVE so the SW
+      // can show the notification with a Snooze 5 min action
       if (swRef.current?.active) {
         swRef.current.active.postMessage({
-          type: "SCHEDULE_REMINDER",
-          jobId: opts.chainId,
-          jobTitle: `Leave now for chain: ${opts.fromPostcode} → ${opts.firstJobPostcode}`,
-          pickupTime: new Date(departureMs).toISOString(),
-          travelRoute: null,
+          type: "SCHEDULE_CHAIN_LEAVE",
+          chainId: opts.chainId,
+          title: "🚶 Leave now for your chain!",
+          body,
+          departureMs,
         });
         return true;
       }
 
-      // Fallback: setTimeout
+      // Fallback: setTimeout (no snooze action available outside SW)
       setTimeout(() => {
         if (!hasPermission()) return;
         new Notification("🚶 Leave now for your chain!", { body, icon: "/favicon.ico", tag });

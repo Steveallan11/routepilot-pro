@@ -15,6 +15,7 @@ const settingsSchema = z.object({
   enableWearTear: z.boolean().optional(),
   homePostcode: z.string().max(10).optional(),
   alertsEnabled: z.boolean().optional(),
+  ppmTarget: z.number().min(0).max(10).optional(),
 });
 
 export const settingsRouter = router({

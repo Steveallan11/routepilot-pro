@@ -101,4 +101,60 @@ self.addEventListener("message", (event) => {
       }, delay);
     }
   }
+
+  // ── Leave Now notification with snooze ──────────────────────────────────────
+  if (event.data?.type === "SCHEDULE_CHAIN_LEAVE") {
+    const { chainId, title, body, departureMs } = event.data;
+    const delay = departureMs - Date.now();
+
+    const fireLeaveNow = () => {
+      self.registration.showNotification(title || "🚶 Leave now for your chain!", {
+        body: body || "",
+        icon: "/favicon.ico",
+        badge: "/favicon.ico",
+        tag: `chain-leave-${chainId}`,
+        requireInteraction: true,
+        vibrate: [300, 100, 300],
+        data: { chainId, leaveNowBody: body },
+        actions: [
+          { action: "snooze-5", title: "Snooze 5 min" },
+          { action: "dismiss", title: "Dismiss" },
+        ],
+      });
+    };
+
+    if (delay <= 0) {
+      fireLeaveNow();
+    } else {
+      setTimeout(fireLeaveNow, delay);
+    }
+  }
+});
+
+// ─── Handle snooze action on Leave Now notifications ─────────────────────────
+self.addEventListener("notificationclick", (event) => {
+  // This listener is separate from the one above — guard with a check
+  if (event.action !== "snooze-5") return;
+  event.notification.close();
+  const { chainId, leaveNowBody } = event.notification.data || {};
+  event.waitUntil(
+    new Promise((resolve) => {
+      setTimeout(() => {
+        self.registration.showNotification("🚶 Leave now for your chain! (snoozed)", {
+          body: leaveNowBody || "",
+          icon: "/favicon.ico",
+          badge: "/favicon.ico",
+          tag: `chain-leave-${chainId}`,
+          requireInteraction: true,
+          vibrate: [300, 100, 300],
+          data: { chainId, leaveNowBody },
+          actions: [
+            { action: "snooze-5", title: "Snooze 5 min" },
+            { action: "dismiss", title: "Dismiss" },
+          ],
+        });
+        resolve();
+      }, 5 * 60 * 1000);
+    })
+  );
 });

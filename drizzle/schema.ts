@@ -47,6 +47,7 @@ export const userSettings = mysqlTable("user_settings", {
   alertsEnabled: boolean("alertsEnabled").default(true).notNull(),
   notifyBadgeUnlocks: boolean("notifyBadgeUnlocks").default(true).notNull(),
   notifyWeeklyDigest: boolean("notifyWeeklyDigest").default(true).notNull(),
+  ppmTarget: decimal("ppmTarget", { precision: 5, scale: 2 }).$type<number>().default(0.5 as unknown as number),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });
