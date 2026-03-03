@@ -2153,7 +2153,20 @@ export default function Jobs({ prefilledDate: initialDate }: { prefilledDate?: s
                       j.brokerName ?? "",
                       [j.vehicleMake, j.vehicleModel, j.vehicleReg].filter(Boolean).join(" "),
                     ]);
-                    const csv = [headers, ...rows].map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(",")).join("\n");
+                    // Totals summary row
+                    const totals = [
+                      "TOTAL",
+                      `${cJobs.length} jobs`,
+                      "",
+                      `£${fmt(cJobs.reduce((s, j) => s + Number(j.deliveryFee), 0), 2)}`,
+                      `£${fmt(cJobs.reduce((s, j) => s + Number(j.estimatedFuelCost ?? 0), 0), 2)}`,
+                      `£${fmt(cJobs.reduce((s, j) => s + Number(j.travelToJobCost ?? 0), 0), 2)}`,
+                      `£${fmt(cJobs.reduce((s, j) => s + Number(j.actualNetProfit ?? j.estimatedNetProfit ?? 0), 0), 2)}`,
+                      fmt(cJobs.reduce((s, j) => s + Number(j.estimatedDistanceMiles ?? 0), 0), 1),
+                      "",
+                      "",
+                    ];
+                    const csv = [headers, ...rows, totals].map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(",")).join("\n");
                     const blob = new Blob([csv], { type: "text/csv" });
                     const url = URL.createObjectURL(blob);
                     const a = document.createElement("a");

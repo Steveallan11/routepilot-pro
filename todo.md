@@ -406,3 +406,8 @@
 - [x] UI Calendar: "Export Chain P&L (CSV)" button in calendar chain sheet
 - [x] CSV columns: Job, Route, Date, Fee, Fuel, Transport, Net Profit, Miles, Broker, Vehicle
 - [x] File downloads as chain-pl-YYYY-MM-DD.csv (client-side Blob, no server round-trip)
+
+## Improvement: Red Alert Badge & CSV Totals & Step Times
+- [x] Red alert badge on reposition leg when transport cost > 40% of next job fee (red) vs > 20% (yellow)
+- [x] CSV export: TOTAL row at bottom with sum of fee, fuel, transport, net profit, miles (Jobs + Calendar)
+- [x] Step card display mode: departure time shown as green pill badge (e.g. "10:48") when cascade is active

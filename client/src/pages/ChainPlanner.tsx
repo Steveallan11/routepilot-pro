@@ -342,6 +342,10 @@ function StepEditor({
                 )}
               </div>
               <div className="flex items-center gap-1.5 shrink-0">
+                {/* Show cascaded departure time if available */}
+                {step.departureTime && step.departureTime !== "Manual" && step.departureTime !== "On demand" && (
+                  <span className="text-[10px] font-mono text-primary/70 bg-primary/10 rounded px-1 py-0.5">{step.departureTime}</span>
+                )}
                 {displayCost > 0 && (
                   <span className="text-[10px] font-mono font-semibold text-primary/80">£{fmt(displayCost)}</span>
                 )}
@@ -482,13 +486,25 @@ function TransportLegCard({
           </div>
         </button>
 
-        {/* Cost alert badge — shown when transport cost > 20% of next job fee */}
-        {nextJobFee && nextJobFee > 0 && (displayCost / nextJobFee) > 0.2 && (
-          <div className="flex items-center gap-1.5 text-xs text-yellow-400 bg-yellow-400/10 rounded-lg px-2 py-1 mt-1">
-            <AlertTriangle size={11} />
-            <span>Transport cost is {Math.round((displayCost / nextJobFee) * 100)}% of next job fee (£{fmt(nextJobFee, 0)})</span>
-          </div>
-        )}
+        {/* Cost alert badge — yellow > 20%, red > 40% of next job fee */}
+        {nextJobFee && nextJobFee > 0 && (displayCost / nextJobFee) > 0.2 && (() => {
+          const pct = Math.round((displayCost / nextJobFee) * 100);
+          const isRed = pct >= 40;
+          return (
+            <div className={`flex items-center gap-1.5 text-xs rounded-lg px-2 py-1 mt-1 ${
+              isRed
+                ? "text-red-400 bg-red-400/10"
+                : "text-yellow-400 bg-yellow-400/10"
+            }`}>
+              <AlertTriangle size={11} />
+              <span>
+                {isRed ? "High cost: " : "Cost alert: "}
+                transport is {pct}% of next job fee (£{fmt(nextJobFee, 0)})
+                {isRed && " — consider a cheaper option"}
+              </span>
+            </div>
+          );
+        })()}
 
         {/* Action row */}
         <div className="flex gap-1.5 mt-1 flex-wrap">

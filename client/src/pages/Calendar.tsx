@@ -814,7 +814,20 @@ function ChainCard({ chain, jobs, onRefresh }: { chain: ChainEntry; jobs: Job[];
                     j.brokerName ?? "",
                     [j.vehicleMake, j.vehicleModel, j.vehicleReg].filter(Boolean).join(" "),
                   ]);
-                  const csv = [headers, ...rows].map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(",")).join("\n");
+                  // Totals summary row
+                  const totals = [
+                    "TOTAL",
+                    `${chainJobs.length} jobs`,
+                    "",
+                    chainJobs.reduce((s, j) => s + Number(j.deliveryFee), 0).toFixed(2),
+                    chainJobs.reduce((s, j) => s + Number(j.estimatedFuelCost ?? 0), 0).toFixed(2),
+                    chainJobs.reduce((s, j) => s + Number(j.travelToJobCost ?? 0), 0).toFixed(2),
+                    chainJobs.reduce((s, j) => s + Number(j.actualNetProfit ?? j.estimatedNetProfit ?? 0), 0).toFixed(2),
+                    chainJobs.reduce((s, j) => s + Number(j.estimatedDistanceMiles ?? 0), 0).toFixed(1),
+                    "",
+                    "",
+                  ];
+                  const csv = [headers, ...rows, totals].map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(",")).join("\n");
                   const blob = new Blob([csv], { type: "text/csv" });
                   const url = URL.createObjectURL(blob);
                   const a = document.createElement("a");
