@@ -50,6 +50,7 @@ export const userSettings = mysqlTable("user_settings", {
   ppmTarget: decimal("ppmTarget", { precision: 5, scale: 2 }).$type<number>().default(0.5 as unknown as number),
   leaderboardOptIn: boolean("leaderboardOptIn").default(false).notNull(),
   displayName: varchar("displayName", { length: 20 }),
+  onboardingCompleted: boolean("onboardingCompleted").default(false).notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });

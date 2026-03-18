@@ -16,6 +16,9 @@ const settingsSchema = z.object({
   homePostcode: z.string().max(10).optional(),
   alertsEnabled: z.boolean().optional(),
   ppmTarget: z.number().min(0).max(10).optional(),
+  leaderboardOptIn: z.boolean().optional(),
+  displayName: z.string().max(20).optional(),
+  onboardingCompleted: z.boolean().optional(),
 });
 
 export const settingsRouter = router({
@@ -49,6 +52,7 @@ export const settingsRouter = router({
           enableWearTear: input.enableWearTear ?? true,
           homePostcode: input.homePostcode,
           alertsEnabled: input.alertsEnabled ?? true,
+          onboardingCompleted: input.onboardingCompleted ?? false,
         });
       }
 

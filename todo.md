@@ -491,3 +491,9 @@
 ### Session 9 — Weekly Score Summary
 - [ ] Add weekly score summary card to Dashboard
 - [ ] Show best job, worst job, weekly avg score vs previous week, transport cost ratio for week
+
+## Next Feature Batch (March 2026)
+
+- [x] Landing page overhaul: hero headline, feature grid, pricing section, social proof
+- [x] 3-step onboarding wizard: set hourly rate, MPG, first job prompt
+- [x] Draft job expiry banner on Check page with "Book it" CTA

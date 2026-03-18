@@ -27,16 +27,45 @@ import Subscription from "./pages/Subscription";
 import Calendar from "./pages/Calendar";
 import Jobs from "./pages/Jobs";
 import Reports from "./pages/Reports";
+import OnboardingWizard from "./components/OnboardingWizard";
 import { useLocation } from "wouter";
+import { useAuth } from "./_core/hooks/useAuth";
+import { trpc } from "./lib/trpc";
 
 function Router() {
   const [location] = useLocation();
-  const hideNav =
+  const { isAuthenticated } = useAuth();
+
+  const { data: settings } = trpc.settings.get.useQuery(undefined, {
+    enabled: isAuthenticated,
+    staleTime: 60_000,
+  });
+  const utils = trpc.useUtils();
+
+  const isPublicRoute =
     location.startsWith("/share/") ||
     location.startsWith("/chain/") ||
     location.startsWith("/shared-route/") ||
-    location === "/landing" ||
-    location.startsWith("/condition-report/");
+    location.startsWith("/condition-report/") ||
+    location === "/landing";
+
+  const hideNav = isPublicRoute;
+
+  // Show onboarding for authenticated users who haven't completed it yet
+  const showOnboarding =
+    isAuthenticated &&
+    !isPublicRoute &&
+    settings !== undefined &&
+    settings !== null &&
+    !settings.onboardingCompleted;
+
+  if (showOnboarding) {
+    return (
+      <OnboardingWizard
+        onComplete={() => utils.settings.get.invalidate()}
+      />
+    );
+  }
 
   return (
     <div className="min-h-dvh bg-background flex flex-col">

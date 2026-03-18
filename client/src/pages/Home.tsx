@@ -185,6 +185,7 @@ function ScoreDimensionBar({ label, value }: { label: string; value: number }) {
 
 export default function Home() {
   const { isAuthenticated } = useAuth();
+  const [, navigate] = useLocation();
 
   // Job chain: up to 3 job slots
   const [jobs, setJobs] = useState<JobSlot[]>([makeJobSlot()]);
@@ -223,6 +224,11 @@ export default function Home() {
 
   const { data: userSettings } = trpc.settings.get.useQuery(undefined, { enabled: isAuthenticated });
   const { data: fuelData } = trpc.fuel.averages.useQuery();
+  const { data: draftJobsData } = trpc.jobs.list.useQuery(
+    { status: "draft", limit: 5 },
+    { enabled: isAuthenticated, staleTime: 30_000 }
+  );
+  const draftJobs = draftJobsData?.jobs ?? [];
   const calculateMutation = trpc.jobs.calculate.useMutation();
   const createJobMutation = trpc.jobs.create.useMutation();
   const uploadImageMutation = trpc.scan.uploadImage.useMutation();
@@ -460,6 +466,49 @@ export default function Home() {
           if (receiptInputRef.current) receiptInputRef.current.value = "";
         }}
       />
+
+      {/* Draft Jobs Banner */}
+      {draftJobs.length > 0 && (
+        <div className="px-4 mb-4">
+          <div className="bg-amber-500/10 border border-amber-500/30 rounded-xl p-3">
+            <div className="flex items-start justify-between gap-3">
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-1.5 mb-1">
+                  <div className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" />
+                  <span className="text-xs font-semibold text-amber-400">
+                    {draftJobs.length === 1 ? "1 saved draft" : `${draftJobs.length} saved drafts`}
+                  </span>
+                </div>
+                {draftJobs.slice(0, 2).map((draft) => {
+                  const expiresAt = draft.draftExpiresAt ? new Date(draft.draftExpiresAt) : null;
+                  const hoursLeft = expiresAt ? Math.max(0, Math.round((expiresAt.getTime() - Date.now()) / 3_600_000)) : null;
+                  return (
+                    <div key={draft.id} className="flex items-center justify-between gap-2 mb-1">
+                      <span className="text-xs text-foreground truncate">
+                        {draft.pickupPostcode} → {draft.dropoffPostcode}
+                        {draft.deliveryFee ? ` · £${Number(draft.deliveryFee).toFixed(0)}` : ""}
+                      </span>
+                      {hoursLeft !== null && (
+                        <span className={`text-[10px] font-medium shrink-0 ${
+                          hoursLeft <= 2 ? "text-red-400" : "text-amber-400/70"
+                        }`}>
+                          {hoursLeft <= 0 ? "Expired" : `${hoursLeft}h left`}
+                        </span>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+              <button
+                onClick={() => navigate("/jobs")}
+                className="shrink-0 bg-amber-500 hover:bg-amber-400 text-black text-xs font-bold px-3 py-1.5 rounded-lg transition-colors"
+              >
+                Book it
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Header */}
       <div className="px-4 mb-5">
