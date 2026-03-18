@@ -2,7 +2,7 @@ import { useLocation, Link } from "wouter";
 import {
   LayoutDashboard, CalendarDays, Briefcase, Wrench, User, LogIn,
   Camera, Fuel, FileText, TrendingUp, Users, Trophy, Zap, Crown,
-  Bell, Navigation, Link2, MoreHorizontal, BarChart3
+  Bell, Navigation, Link2, MoreHorizontal, BarChart3, PlusCircle
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/_core/hooks/useAuth";
@@ -14,8 +14,9 @@ import { useState } from "react";
 
 const primaryNav = [
   { path: "/dashboard", icon: LayoutDashboard, label: "Home" },
-  { path: "/calendar", icon: CalendarDays, label: "Calendar" },
   { path: "/jobs", icon: Briefcase, label: "Jobs" },
+  { path: "/check", icon: PlusCircle, label: "Check" },
+  { path: "/calendar", icon: CalendarDays, label: "Calendar" },
 ];
 
 // ─── Tools drawer items ───────────────────────────────────────────────────────

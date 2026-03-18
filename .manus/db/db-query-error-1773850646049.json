@@ -1,0 +1,13 @@
+{
+  "query": "\nCREATE TABLE IF NOT EXISTS mileage_log (\n  id INT AUTO_INCREMENT PRIMARY KEY,\n  userId INT NOT NULL,\n  jobId INT NULL,\n  date VARCHAR(10) NOT NULL,\n  startMileage DECIMAL(10,1) NULL,\n  endMileage DECIMAL(10,1) NULL,\n  distanceMiles DECIMAL(8,2) NOT NULL,\n  purpose ENUM('delivery','reposition','personal') NOT NULL DEFAULT 'delivery',\n  notes TEXT NULL,\n  createdAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP\n);\n\nCREATE TABLE IF NOT EXISTS leaderboard_entries (\n  id INT AUTO_INCREMENT PRIMARY KEY,\n  userId INT NOT NULL,\n  weekKey VARCHAR(10) NOT NULL,\n  region VARCHAR(50) NULL,\n  netEarnings DECIMAL(10,2) NOT NULL DEFAULT 0,\n  jobCount INT NOT NULL DEFAULT 0,\n  totalMiles DECIMAL(10,2) NOT NULL DEFAULT 0,\n  avgGrade VARCHAR(3) NULL,\n  rank INT NULL,\n  optedIn BOOLEAN NOT NULL DEFAULT FALSE,\n  displayName VARCHAR(50) NULL,\n  createdAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,\n  updatedAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP\n);\n",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway02.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 29dmg1z8s7MGkda.cd2f01f00c99 --database 6VTDyDwMUZs22XSbYJviE3 --execute \nCREATE TABLE IF NOT EXISTS mileage_log (\n  id INT AUTO_INCREMENT PRIMARY KEY,\n  userId INT NOT NULL,\n  jobId INT NULL,\n  date VARCHAR(10) NOT NULL,\n  startMileage DECIMAL(10,1) NULL,\n  endMileage DECIMAL(10,1) NULL,\n  distanceMiles DECIMAL(8,2) NOT NULL,\n  purpose ENUM('delivery','reposition','personal') NOT NULL DEFAULT 'delivery',\n  notes TEXT NULL,\n  createdAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP\n);\n\nCREATE TABLE IF NOT EXISTS leaderboard_entries (\n  id INT AUTO_INCREMENT PRIMARY KEY,\n  userId INT NOT NULL,\n  weekKey VARCHAR(10) NOT NULL,\n  region VARCHAR(50) NULL,\n  netEarnings DECIMAL(10,2) NOT NULL DEFAULT 0,\n  jobCount INT NOT NULL DEFAULT 0,\n  totalMiles DECIMAL(10,2) NOT NULL DEFAULT 0,\n  avgGrade VARCHAR(3) NULL,\n  rank INT NULL,\n  optedIn BOOLEAN NOT NULL DEFAULT FALSE,\n  displayName VARCHAR(50) NULL,\n  createdAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,\n  updatedAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP\n);\n",
+  "returncode": 1,
+  "logs": [
+    "ERROR 1064 (42000) at line 15: You have an error in your SQL syntax; check the manual that corresponds to your TiDB version for the right syntax to use line 10 column 7 near \"rank INT NULL,",
+    "  optedIn BOOLEAN NOT NULL DEFAULT FALSE,",
+    "  displayName VARCHAR(50) NULL,",
+    "  createdAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,",
+    "  updatedAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP",
+    ")\""
+  ]
+}

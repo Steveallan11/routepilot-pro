@@ -184,6 +184,10 @@ export const jobsRouter = router({
         estimatedProfitPerHour: breakdown.profitPerHour,
         estimatedProfitPerMile: breakdown.profitPerMile,
         worthItScore: breakdown.worthItScore,
+        grade: breakdown.grade,
+        compositeScore: breakdown.compositeScore,
+        scoreDimensions: breakdown.scoreDimensions,
+        improvementTips: breakdown.improvementTips,
         scheduledPickupAt: input.scheduledPickupAt ? new Date(input.scheduledPickupAt) : undefined,
         routeData: routeInfo?.routeData ?? null,
         // Travel expenses
@@ -237,7 +241,7 @@ export const jobsRouter = router({
   // List user's jobs
   list: protectedProcedure
     .input(z.object({
-      status: z.enum(["planned", "active", "completed", "cancelled"]).optional(),
+      status: z.enum(["draft", "planned", "active", "completed", "cancelled"]).optional(),
       limit: z.number().min(1).max(100).default(20),
       offset: z.number().min(0).default(0),
     }))
@@ -334,7 +338,7 @@ export const jobsRouter = router({
   update: protectedProcedure
     .input(z.object({
       id: z.number(),
-      status: z.enum(["planned", "active", "completed", "cancelled"]).optional(),
+      status: z.enum(["draft", "planned", "active", "completed", "cancelled"]).optional(),
       actualDistanceMiles: z.number().optional(),
       actualDurationMins: z.number().optional(),
       actualFuelCost: z.number().optional(),
@@ -501,6 +505,10 @@ export const jobsRouter = router({
         estimatedProfitPerHour: breakdown.profitPerHour,
         estimatedProfitPerMile: breakdown.profitPerMile,
         worthItScore: breakdown.worthItScore,
+        grade: breakdown.grade,
+        compositeScore: breakdown.compositeScore,
+        scoreDimensions: breakdown.scoreDimensions,
+        improvementTips: breakdown.improvementTips,
         routeData: routeInfo?.routeData ?? null,
         travelToJobCost: input.travelToJobCost,
         travelToJobMode: input.travelToJobMode,

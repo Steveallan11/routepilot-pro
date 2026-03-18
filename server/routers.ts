@@ -20,6 +20,7 @@ import { liftsRouter } from "./routers/lifts";
 import { notificationsRouter } from "./routers/notifications";
 import { exportsRouter } from "./routers/exports";
 import { travelPlannerRouter } from "./routers/travelPlanner";
+import { leaderboardRouter } from "./routers/leaderboard";
 
 export const appRouter = router({
   system: systemRouter,
@@ -50,6 +51,7 @@ export const appRouter = router({
   notifications: notificationsRouter,
   exports: exportsRouter,
   travelPlanner: travelPlannerRouter,
+  leaderboard: leaderboardRouter,
 });
 
 export type AppRouter = typeof appRouter;

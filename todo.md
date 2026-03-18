@@ -435,3 +435,59 @@
 - [ ] Reports page: add month/week toggle; month view shows 4-week bar chart and monthly totals
 - [ ] Reposition leg header: show paperclip icon + first line of notes when notes are set (collapsed state)
 - [ ] Jobs list chain group card: show green "Done" badge when all jobs in chain are status=done
+
+## Gap Analysis Fixes (March 2026)
+
+### Session 1 — Design Tokens, Fonts & Colours
+- [x] Replace Inter with Syne (700/800) + DM Sans (400/500/600) + JetBrains Mono (500/600) in index.css
+- [x] Change body font-family to DM Sans
+- [x] Add RoutePilot CSS custom properties (--color-bg, --color-surface, --color-elevated, --color-border, --color-blue, --color-green, --color-amber, --color-red, --color-text-primary, --color-text-secondary, --color-text-muted)
+- [x] Change --background to #0B0D14, --card to #13161F, --primary to #2D7DD2 (electric blue), --border to #252A3A
+- [x] Add utility classes: .font-display, .font-mono-rp, .text-net, .postcode, .grade-chip
+
+### Session 2 — Pricing, Stripe & ProGate
+- [ ] Fix server/stripe/products.ts: monthly 999 pence (£9.99), annual 7499 pence (£74.99)
+- [ ] Update FREE_LIMITS: jobHistoryMax 15, add receiptScansPerMonth:3, savedRoutesMax:3, savedBrokersMax:5
+- [ ] Fix ProGate.tsx button copy to £9.99/mo and £74.99/year · Save £44.89; add savings prop
+- [ ] Fix Subscription.tsx: all prices to £9.99/£74.99, annual first with MOST POPULAR badge, 7-day trial copy
+
+### Session 3 — Database Schema
+- [ ] Add 'draft' as first value in jobs status enum
+- [ ] Replace worthItScore enum green/amber/red → A+/A/B/C/D
+- [ ] Add new scoring fields: compositeScore, scoreState, scoreDimensions, transportCostRatio, scoreVariance, improvementTips, actualTravelToJobCost, actualTravelHomeCost, startedAt, draftExpiresAt
+- [ ] Add mileage_log table
+- [ ] Add leaderboard_entries table
+- [ ] Apply migration via webdev_execute_sql
+
+### Session 4 — Scoring Engine Upgrade
+- [ ] Add WorthItGrade, ScoreState, ScoreDimensions, ProfitabilityScore types to shared/routepilot-types.ts
+- [ ] Add calculateGrade(), calculateCompositeScore(), getTransportCostRatio() functions
+- [ ] Update calculateJobCost() to return new grade format
+- [ ] Add calculateJobScore() to server/gamification.ts
+- [ ] Update jobs router create/complete to use new scoring
+- [ ] Update job cards in Jobs.tsx to show grade letter (A+/A/B/C/D) instead of colour dot
+
+### Session 5 — Dashboard UX
+- [ ] Add draft banner to Dashboard (shows when draft jobs exist, with Confirm/Remove inline)
+- [ ] Add "Check a Job Before You Book" CTA button to Dashboard
+- [ ] Update stat cards to match mockup: Net Today / Rate (£/hr with target) / Gross / Miles+HMRC
+
+### Session 6 — Pre-Booking Check Results Screen
+- [ ] Refactor results section in Home.tsx: map at top, swipeable Fastest/Balanced/Cheapest route cards, profit summary panel
+- [ ] Live net profit update as route card changes
+- [ ] Save as Draft button (saves job as draft status)
+- [ ] Add to Chain button
+
+### Session 7 — Navigation Restructure
+- [ ] Add dedicated Check tab to primary bottom nav (Home/Jobs/Check/Calendar/Me)
+- [ ] Remove Check from Tools drawer
+- [ ] Point Check tab to /calculator
+
+### Session 8 — Leaderboard
+- [ ] Build leaderboard display on Badges/Me page
+- [ ] Show weekly position, region, net earnings, top 3 for context
+- [ ] Add opt-in toggle for leaderboard participation
+
+### Session 9 — Weekly Score Summary
+- [ ] Add weekly score summary card to Dashboard
+- [ ] Show best job, worst job, weekly avg score vs previous week, transport cost ratio for week

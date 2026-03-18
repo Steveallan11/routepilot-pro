@@ -35,9 +35,9 @@ export function ProGate({ feature, description, children }: ProGateProps) {
           className="bg-amber-500 hover:bg-amber-600 text-black font-semibold gap-2"
         >
           <Zap className="w-4 h-4" />
-          Upgrade to Pro — £19.99/mo
+          Upgrade to Pro — £9.99/mo
         </Button>
-        <p className="text-xs text-muted-foreground mt-2">or £149/year · Cancel anytime</p>
+        <p className="text-xs text-muted-foreground mt-2">or £74.99/year · Save £44.89 · 7-day free trial</p>
       </div>
     </div>
   );

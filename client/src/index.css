@@ -1,6 +1,6 @@
 @import "tailwindcss";
 @import "tw-animate-css";
-@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap");
+@import url("https://fonts.googleapis.com/css2?family=Syne:wght@700;800&family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&family=JetBrains+Mono:wght@500;600&display=swap");
 
 @custom-variant dark (&:is(.dark *));
 
@@ -41,49 +41,85 @@
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-ring: var(--sidebar-ring);
+  /* RoutePilot semantic colour tokens */
+  --color-rp-blue: var(--rp-blue);
+  --color-rp-green: var(--rp-green);
+  --color-rp-amber: var(--rp-amber);
+  --color-rp-red: var(--rp-red);
+  --color-rp-surface: var(--rp-surface);
+  --color-rp-elevated: var(--rp-elevated);
+  --color-rp-border: var(--rp-border);
 }
 
 :root {
-  /* RoutePilot Pro — Dark-first design (deep navy + electric green) */
+  /* RoutePilot Pro — Dark-first design (deep space navy + electric blue) */
   --radius: 0.75rem;
-  --background: oklch(0.13 0.015 240);
-  --foreground: oklch(0.96 0.005 240);
-  --card: oklch(0.17 0.018 240);
-  --card-foreground: oklch(0.96 0.005 240);
-  --popover: oklch(0.17 0.018 240);
-  --popover-foreground: oklch(0.96 0.005 240);
-  --primary: oklch(0.82 0.22 142);
-  --primary-foreground: oklch(0.13 0.015 240);
-  --secondary: oklch(0.22 0.02 240);
-  --secondary-foreground: oklch(0.85 0.01 240);
-  --muted: oklch(0.22 0.02 240);
-  --muted-foreground: oklch(0.55 0.01 240);
-  --accent: oklch(0.82 0.22 142);
-  --accent-foreground: oklch(0.13 0.015 240);
-  --destructive: oklch(0.62 0.22 25);
-  --destructive-foreground: oklch(0.98 0.005 25);
-  --border: oklch(0.28 0.02 240);
-  --input: oklch(0.22 0.02 240);
-  --ring: oklch(0.82 0.22 142);
-  --chart-1: oklch(0.82 0.22 142);
-  --chart-2: oklch(0.72 0.18 200);
-  --chart-3: oklch(0.78 0.18 65);
-  --chart-4: oklch(0.62 0.22 25);
-  --chart-5: oklch(0.65 0.15 280);
-  --sidebar: oklch(0.17 0.018 240);
-  --sidebar-foreground: oklch(0.96 0.005 240);
-  --sidebar-primary: oklch(0.82 0.22 142);
-  --sidebar-primary-foreground: oklch(0.13 0.015 240);
-  --sidebar-accent: oklch(0.22 0.02 240);
-  --sidebar-accent-foreground: oklch(0.85 0.01 240);
-  --sidebar-border: oklch(0.28 0.02 240);
-  --sidebar-ring: oklch(0.82 0.22 142);
+
+  /* Core backgrounds — exact spec hex values */
+  --background: #0B0D14;
+  --foreground: #E8EAF0;
+  --card: #13161F;
+  --card-foreground: #E8EAF0;
+  --popover: #13161F;
+  --popover-foreground: #E8EAF0;
+
+  /* Primary = electric blue (not green) */
+  --primary: #2D7DD2;
+  --primary-foreground: #FFFFFF;
+
+  /* Secondary / muted */
+  --secondary: #1C2030;
+  --secondary-foreground: #A0A8C0;
+  --muted: #1C2030;
+  --muted-foreground: #6B7494;
+
+  /* Accent = blue (same as primary for interactive highlights) */
+  --accent: #2D7DD2;
+  --accent-foreground: #FFFFFF;
+
+  /* Destructive */
+  --destructive: #E53E3E;
+  --destructive-foreground: #FFFFFF;
+
+  /* Borders and inputs */
+  --border: #252A3A;
+  --input: #1C2030;
+  --ring: #2D7DD2;
+
+  /* Chart colours */
+  --chart-1: #2D7DD2;
+  --chart-2: #22C55E;
+  --chart-3: #F59E0B;
+  --chart-4: #E53E3E;
+  --chart-5: #8B5CF6;
+
+  /* Sidebar */
+  --sidebar: #0F1219;
+  --sidebar-foreground: #E8EAF0;
+  --sidebar-primary: #2D7DD2;
+  --sidebar-primary-foreground: #FFFFFF;
+  --sidebar-accent: #1C2030;
+  --sidebar-accent-foreground: #A0A8C0;
+  --sidebar-border: #252A3A;
+  --sidebar-ring: #2D7DD2;
+
+  /* RoutePilot semantic tokens — use these in components */
+  --rp-blue: #2D7DD2;
+  --rp-green: #22C55E;
+  --rp-amber: #F59E0B;
+  --rp-red: #E53E3E;
+  --rp-surface: #13161F;
+  --rp-elevated: #1C2030;
+  --rp-border: #252A3A;
+  --rp-text-primary: #E8EAF0;
+  --rp-text-secondary: #A0A8C0;
+  --rp-text-muted: #6B7494;
 }
 
 .dark {
-  /* Same as :root — dark is the default theme */
-  --background: oklch(0.13 0.015 240);
-  --foreground: oklch(0.96 0.005 240);
+  /* Same as :root — dark is the default and only theme */
+  --background: #0B0D14;
+  --foreground: #E8EAF0;
 }
 
 @layer base {
@@ -96,10 +132,10 @@
     scroll-behavior: smooth;
   }
   body {
-    @apply bg-background text-foreground font-sans antialiased;
+    @apply bg-background text-foreground antialiased;
+    font-family: 'DM Sans', system-ui, sans-serif;
     min-height: 100dvh;
     overscroll-behavior: none;
-    font-family: 'Inter', system-ui, sans-serif;
   }
   button:not(:disabled),
   [role="button"]:not([aria-disabled="true"]),
@@ -115,95 +151,124 @@
 }
 
 @layer components {
-  /**
-   * Custom container utility that centers content and adds responsive padding.
-   *
-   * This overrides Tailwind's default container behavior to:
-   * - Auto-center content (mx-auto)
-   * - Add responsive horizontal padding
-   * - Set max-width for large screens
-   *
-   * Usage: <div className="container">...</div>
-   *
-   * For custom widths, use max-w-* utilities directly:
-   * <div className="max-w-6xl mx-auto px-4">...</div>
-   */
+  /* ── Container ─────────────────────────────────────────────────────── */
   .container {
     width: 100%;
     margin-left: auto;
     margin-right: auto;
-    padding-left: 1rem; /* 16px - mobile padding */
+    padding-left: 1rem;
     padding-right: 1rem;
   }
-
-  .flex {
-    min-height: 0;
-    min-width: 0;
-  }
-
   @media (min-width: 640px) {
-    .container {
-      padding-left: 1.5rem; /* 24px - tablet padding */
-      padding-right: 1.5rem;
-    }
+    .container { padding-left: 1.5rem; padding-right: 1.5rem; }
   }
-
   @media (min-width: 1024px) {
-    .container {
-      padding-left: 2rem;
-      padding-right: 2rem;
-      max-width: 1280px;
-    }
+    .container { padding-left: 2rem; padding-right: 2rem; max-width: 1280px; }
   }
 
-  /* Traffic light profit badges */
+  .flex { min-height: 0; min-width: 0; }
+
+  /* ── Typography utilities ──────────────────────────────────────────── */
+  /* Display / hero numbers — Syne ExtraBold */
+  .font-display {
+    font-family: 'Syne', system-ui, sans-serif;
+    font-weight: 800;
+    letter-spacing: -0.02em;
+  }
+  /* Monospace for postcodes, vehicle regs, job refs */
+  .font-mono-rp {
+    font-family: 'JetBrains Mono', 'Courier New', monospace;
+    font-weight: 500;
+    letter-spacing: 0.04em;
+  }
+  /* Postcode shorthand */
+  .postcode {
+    font-family: 'JetBrains Mono', 'Courier New', monospace;
+    font-weight: 600;
+    letter-spacing: 0.05em;
+    font-size: 0.85em;
+    color: var(--rp-text-secondary);
+  }
+  /* Net profit value — always green */
+  .text-net {
+    color: var(--rp-green);
+    font-family: 'Syne', system-ui, sans-serif;
+    font-weight: 700;
+  }
+
+  /* ── Grade chips ───────────────────────────────────────────────────── */
+  .grade-chip {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-family: 'Syne', system-ui, sans-serif;
+    font-weight: 800;
+    font-size: 0.75rem;
+    line-height: 1;
+    padding: 0.2rem 0.45rem;
+    border-radius: 0.375rem;
+    letter-spacing: 0.01em;
+  }
+  .grade-chip-aplus  { background: #22C55E22; color: #22C55E; border: 1px solid #22C55E44; }
+  .grade-chip-a      { background: #4ADE8022; color: #4ADE80; border: 1px solid #4ADE8044; }
+  .grade-chip-b      { background: #2D7DD222; color: #60A5FA; border: 1px solid #2D7DD244; }
+  .grade-chip-c      { background: #F59E0B22; color: #FCD34D; border: 1px solid #F59E0B44; }
+  .grade-chip-d      { background: #E53E3E22; color: #FC8181; border: 1px solid #E53E3E44; }
+
+  /* ── Traffic light badges (legacy, kept for compatibility) ─────────── */
   .badge-green {
-    background: oklch(0.72 0.2 142 / 0.15);
-    color: oklch(0.82 0.22 142);
-    border: 1px solid oklch(0.72 0.2 142 / 0.3);
+    background: #22C55E22;
+    color: #22C55E;
+    border: 1px solid #22C55E44;
   }
   .badge-amber {
-    background: oklch(0.78 0.18 65 / 0.15);
-    color: oklch(0.88 0.18 65);
-    border: 1px solid oklch(0.78 0.18 65 / 0.3);
+    background: #F59E0B22;
+    color: #FCD34D;
+    border: 1px solid #F59E0B44;
   }
   .badge-red {
-    background: oklch(0.62 0.22 25 / 0.15);
-    color: oklch(0.72 0.22 25);
-    border: 1px solid oklch(0.62 0.22 25 / 0.3);
+    background: #E53E3E22;
+    color: #FC8181;
+    border: 1px solid #E53E3E44;
   }
 
-  /* Card hover */
+  /* ── Card hover ────────────────────────────────────────────────────── */
   .card-hover {
     transition: all 0.2s ease;
   }
   .card-hover:hover {
-    border-color: oklch(0.82 0.22 142 / 0.4);
-    box-shadow: 0 8px 24px oklch(0.82 0.22 142 / 0.06);
+    border-color: #2D7DD244;
+    box-shadow: 0 8px 24px #2D7DD210;
   }
 
-  /* Gradient text */
+  /* ── Gradient text ─────────────────────────────────────────────────── */
   .gradient-text {
-    background: linear-gradient(135deg, oklch(0.82 0.22 142), oklch(0.72 0.2 200));
+    background: linear-gradient(135deg, #2D7DD2, #22C55E);
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
     background-clip: text;
   }
 
-  /* Profit glow */
+  /* ── Profit glow ───────────────────────────────────────────────────── */
   .profit-glow {
-    text-shadow: 0 0 20px oklch(0.82 0.22 142 / 0.4);
+    text-shadow: 0 0 20px #22C55E66;
   }
 
-  /* Scrollbar */
+  /* ── Scrollbar ─────────────────────────────────────────────────────── */
   ::-webkit-scrollbar { width: 4px; height: 4px; }
   ::-webkit-scrollbar-track { background: transparent; }
-  ::-webkit-scrollbar-thumb { background: oklch(0.35 0.02 240); border-radius: 2px; }
+  ::-webkit-scrollbar-thumb { background: #252A3A; border-radius: 2px; }
 
-  /* Pulse for live data */
+  /* ── Animations ────────────────────────────────────────────────────── */
   @keyframes pulse-green {
     0%, 100% { opacity: 1; }
     50% { opacity: 0.5; }
   }
   .pulse-green { animation: pulse-green 2s ease-in-out infinite; }
+
+  @keyframes slide-up {
+    from { transform: translateY(8px); opacity: 0; }
+    to   { transform: translateY(0);   opacity: 1; }
+  }
+  .slide-up { animation: slide-up 0.25s ease-out both; }
 }

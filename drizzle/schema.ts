@@ -48,6 +48,8 @@ export const userSettings = mysqlTable("user_settings", {
   notifyBadgeUnlocks: boolean("notifyBadgeUnlocks").default(true).notNull(),
   notifyWeeklyDigest: boolean("notifyWeeklyDigest").default(true).notNull(),
   ppmTarget: decimal("ppmTarget", { precision: 5, scale: 2 }).$type<number>().default(0.5 as unknown as number),
+  leaderboardOptIn: boolean("leaderboardOptIn").default(false).notNull(),
+  displayName: varchar("displayName", { length: 20 }),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });
@@ -60,7 +62,7 @@ export type InsertUserSettings = typeof userSettings.$inferInsert;
 export const jobs = mysqlTable("jobs", {
   id: int("id").autoincrement().primaryKey(),
   userId: int("userId").notNull(),
-  status: mysqlEnum("status", ["planned", "active", "completed", "cancelled"]).default("planned").notNull(),
+  status: mysqlEnum("status", ["draft", "planned", "active", "completed", "cancelled"]).default("planned").notNull(),
 
   // Route
   pickupPostcode: varchar("pickupPostcode", { length: 10 }).notNull(),
@@ -83,7 +85,20 @@ export const jobs = mysqlTable("jobs", {
   estimatedNetProfit: decimal("estimatedNetProfit", { precision: 10, scale: 2 }).$type<number>(),
   estimatedProfitPerHour: decimal("estimatedProfitPerHour", { precision: 8, scale: 2 }).$type<number>(),
   estimatedProfitPerMile: decimal("estimatedProfitPerMile", { precision: 8, scale: 4 }).$type<number>(),
+  // Legacy traffic light (kept for backward compat)
   worthItScore: mysqlEnum("worthItScore", ["green", "amber", "red"]),
+  // A+/A/B/C/D composite grade
+  grade: mysqlEnum("grade", ["A+", "A", "B", "C", "D"]),
+  compositeScore: decimal("compositeScore", { precision: 5, scale: 2 }).$type<number>(),
+  scoreState: mysqlEnum("scoreState", ["estimated", "travel_adjusted", "receipt_adjusted", "final"]).default("estimated"),
+  scoreDimensions: json("scoreDimensions"),
+  transportCostRatio: decimal("transportCostRatio", { precision: 5, scale: 4 }).$type<number>(),
+  scoreVariance: decimal("scoreVariance", { precision: 5, scale: 2 }).$type<number>(),
+  improvementTips: json("improvementTips").$type<string[]>(),
+  actualTravelToJobCost: decimal("actualTravelToJobCost", { precision: 8, scale: 2 }).$type<number>(),
+  actualTravelHomeCost: decimal("actualTravelHomeCost", { precision: 8, scale: 2 }).$type<number>(),
+  startedAt: timestamp("startedAt"),
+  draftExpiresAt: timestamp("draftExpiresAt"),
 
   // Actual values (filled in after completion)
   actualDistanceMiles: decimal("actualDistanceMiles", { precision: 8, scale: 2 }).$type<number>(),
@@ -423,3 +438,42 @@ export const usageCounters = mysqlTable("usage_counters", {
 
 export type UsageCounter = typeof usageCounters.$inferSelect;
 export type InsertUsageCounter = typeof usageCounters.$inferInsert;
+
+// ─── Mileage Log ──────────────────────────────────────────────────────────────
+
+export const mileageLog = mysqlTable("mileage_log", {
+  id: int("id").autoincrement().primaryKey(),
+  userId: int("userId").notNull(),
+  jobId: int("jobId"),
+  date: varchar("date", { length: 10 }).notNull(), // YYYY-MM-DD
+  startMileage: decimal("startMileage", { precision: 10, scale: 1 }).$type<number>(),
+  endMileage: decimal("endMileage", { precision: 10, scale: 1 }).$type<number>(),
+  distanceMiles: decimal("distanceMiles", { precision: 8, scale: 2 }).$type<number>().notNull(),
+  purpose: mysqlEnum("purpose", ["delivery", "reposition", "personal"]).default("delivery").notNull(),
+  notes: text("notes"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type MileageLog = typeof mileageLog.$inferSelect;
+export type InsertMileageLog = typeof mileageLog.$inferInsert;
+
+// ─── Leaderboard Entries ──────────────────────────────────────────────────────
+
+export const leaderboardEntries = mysqlTable("leaderboard_entries", {
+  id: int("id").autoincrement().primaryKey(),
+  userId: int("userId").notNull(),
+  weekKey: varchar("weekKey", { length: 10 }).notNull(), // YYYY-WNN
+  region: varchar("region", { length: 50 }),             // e.g. "West Midlands"
+  netEarnings: decimal("netEarnings", { precision: 10, scale: 2 }).$type<number>().default(0 as unknown as number),
+  jobCount: int("jobCount").default(0).notNull(),
+  totalMiles: decimal("totalMiles", { precision: 10, scale: 2 }).$type<number>().default(0 as unknown as number),
+  avgGrade: varchar("avgGrade", { length: 3 }),           // A+, A, B, C, D
+  leaderRank: int("leaderRank"),
+  optedIn: boolean("optedIn").default(false).notNull(),
+  displayName: varchar("displayName", { length: 50 }),    // anonymised name for leaderboard
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type LeaderboardEntry = typeof leaderboardEntries.$inferSelect;
+export type InsertLeaderboardEntry = typeof leaderboardEntries.$inferInsert;

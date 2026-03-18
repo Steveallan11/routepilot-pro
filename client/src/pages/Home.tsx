@@ -147,6 +147,40 @@ function WorthItBadge({ score }: { score: "green" | "amber" | "red" }) {
   );
 }
 
+type Grade = "A+" | "A" | "B" | "C" | "D";
+
+function GradeChip({ grade, score }: { grade: Grade; score: number }) {
+  const config: Record<Grade, { bg: string; text: string; ring: string }> = {
+    "A+": { bg: "bg-emerald-500/20", text: "text-emerald-400", ring: "ring-emerald-500/40" },
+    "A":  { bg: "bg-green-500/20",   text: "text-green-400",   ring: "ring-green-500/40" },
+    "B":  { bg: "bg-blue-500/20",    text: "text-blue-400",    ring: "ring-blue-500/40" },
+    "C":  { bg: "bg-amber-500/20",   text: "text-amber-400",   ring: "ring-amber-500/40" },
+    "D":  { bg: "bg-red-500/20",     text: "text-red-400",     ring: "ring-red-500/40" },
+  };
+  const { bg, text, ring } = config[grade];
+  return (
+    <div className={cn("flex items-center gap-2 px-3 py-1.5 rounded-xl ring-1", bg, ring)}>
+      <span className={cn("text-xl font-black font-display leading-none", text)}>{grade}</span>
+      <span className={cn("text-xs font-semibold tabular-nums", text)}>{score}</span>
+    </div>
+  );
+}
+
+function ScoreDimensionBar({ label, value }: { label: string; value: number }) {
+  const color = value >= 75 ? "bg-emerald-500" : value >= 50 ? "bg-blue-500" : value >= 35 ? "bg-amber-500" : "bg-red-500";
+  return (
+    <div className="space-y-0.5">
+      <div className="flex justify-between text-xs">
+        <span className="text-muted-foreground">{label}</span>
+        <span className="font-mono text-foreground">{value}</span>
+      </div>
+      <div className="h-1.5 rounded-full bg-secondary overflow-hidden">
+        <div className={cn("h-full rounded-full transition-all", color)} style={{ width: `${value}%` }} />
+      </div>
+    </div>
+  );
+}
+
 // ─── Main Component ───────────────────────────────────────────────────────────
 
 export default function Home() {
@@ -1059,10 +1093,11 @@ export default function Home() {
               const job = jobs.find(j => j.id === res.jobId);
               return (
                 <Card key={res.jobId} className="bg-card border-border overflow-hidden">
-                  <div className={cn("h-1",
-                    res.breakdown.worthItScore === "green" && "bg-[oklch(0.72_0.2_142)]",
-                    res.breakdown.worthItScore === "amber" && "bg-[oklch(0.78_0.18_65)]",
-                    res.breakdown.worthItScore === "red" && "bg-[oklch(0.62_0.22_25)]",
+                  <div className={cn("h-1.5",
+                    (res.breakdown.grade === "A+" || res.breakdown.grade === "A") && "bg-emerald-500",
+                    res.breakdown.grade === "B" && "bg-blue-500",
+                    res.breakdown.grade === "C" && "bg-amber-500",
+                    res.breakdown.grade === "D" && "bg-red-500",
                   )} />
                   <CardContent className="pt-3">
                     {/* Job header */}
@@ -1078,7 +1113,7 @@ export default function Home() {
                           <span className="font-mono text-xs bg-secondary px-1.5 py-0.5 rounded">{job.vehicleReg}</span>
                         )}
                       </div>
-                      <WorthItBadge score={res.breakdown.worthItScore} />
+                      <GradeChip grade={res.breakdown.grade as Grade} score={res.breakdown.compositeScore} />
                     </div>
 
                     {/* Vehicle details on card */}
@@ -1122,6 +1157,28 @@ export default function Home() {
                         <p className="text-sm font-bold font-mono text-foreground">£{res.breakdown.profitPerMile.toFixed(2)}</p>
                       </div>
                     </div>
+
+                    {/* Score dimensions */}
+                    <div className="bg-secondary/40 rounded-xl p-3 mb-3 space-y-2">
+                      <p className="text-xs text-muted-foreground uppercase tracking-wide font-medium mb-2">Score Breakdown</p>
+                      <ScoreDimensionBar label="£/mile" value={res.breakdown.scoreDimensions.ppmScore} />
+                      <ScoreDimensionBar label="Net profit" value={res.breakdown.scoreDimensions.netProfitScore} />
+                      <ScoreDimensionBar label="Travel ratio" value={res.breakdown.scoreDimensions.transportRatioScore} />
+                      <ScoreDimensionBar label="£/hour" value={res.breakdown.scoreDimensions.pphScore} />
+                      <ScoreDimensionBar label="Efficiency" value={res.breakdown.scoreDimensions.efficiencyScore} />
+                    </div>
+
+                    {/* Improvement tips */}
+                    {res.breakdown.improvementTips.length > 0 && (
+                      <div className="mb-3 space-y-1.5">
+                        {res.breakdown.improvementTips.map((tip, i) => (
+                          <div key={i} className="flex items-start gap-2 text-xs text-muted-foreground bg-secondary/30 rounded-lg px-2.5 py-2">
+                            <span className="text-primary shrink-0 mt-0.5">→</span>
+                            <span>{tip}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
 
                     {/* Cost breakdown */}
                     <div className="space-y-1.5 text-sm border-t border-border pt-3">

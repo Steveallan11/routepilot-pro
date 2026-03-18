@@ -2,7 +2,12 @@ import { useAuth } from "@/_core/hooks/useAuth";
 import { getLoginUrl } from "@/const";
 import { trpc } from "@/lib/trpc";
 import { motion } from "framer-motion";
-import { Award, Lock, Trophy } from "lucide-react";
+import { Award, Lock, Trophy, Medal, Users, ChevronLeft, ChevronRight, ToggleLeft, ToggleRight } from "lucide-react";
+import { useState } from "react";
+import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { toast } from "sonner";
 type BadgeCategory = "milestone" | "earnings" | "distance" | "eco" | "speed" | "streak" | "special";
 
 const RARITY_STYLES: Record<string, { border: string; bg: string; label: string; labelColor: string }> = {
@@ -119,6 +124,148 @@ function BadgeCard({ badge }: { badge: BadgeWithProgress }) {
   );
 }
 
+function LeaderboardSection() {
+  const { isAuthenticated } = useAuth();
+  const [weekOffset, setWeekOffset] = useState(0);
+  const [editingName, setEditingName] = useState(false);
+  const [nameInput, setNameInput] = useState("");
+
+  const { data: board, isLoading: boardLoading } = trpc.leaderboard.weekly.useQuery({ weekOffset });
+  const { data: myPos, refetch: refetchMyPos } = trpc.leaderboard.myPosition.useQuery(
+    { weekOffset },
+    { enabled: isAuthenticated }
+  );
+  const updateOptIn = trpc.leaderboard.updateOptIn.useMutation({
+    onSuccess: () => { refetchMyPos(); toast.success("Leaderboard preference saved"); },
+  });
+
+  const gradeColor = (g: string | null) => {
+    if (!g) return "text-muted-foreground";
+    if (g === "A+") return "text-emerald-400";
+    if (g === "A") return "text-green-400";
+    if (g === "B") return "text-blue-400";
+    if (g === "C") return "text-amber-400";
+    return "text-red-400";
+  };
+
+  const weekLabel = weekOffset === 0 ? "This Week" : weekOffset === -1 ? "Last Week" : `${Math.abs(weekOffset)} weeks ago`;
+
+  return (
+    <div className="px-4 mb-6">
+      <div className="flex items-center justify-between mb-3">
+        <div className="flex items-center gap-2">
+          <Medal size={16} className="text-primary" />
+          <h2 className="text-foreground font-semibold text-sm">Weekly Leaderboard</h2>
+        </div>
+        <div className="flex items-center gap-1">
+          <button
+            onClick={() => setWeekOffset(v => Math.max(-4, v - 1))}
+            className="w-7 h-7 rounded-lg bg-secondary flex items-center justify-center text-muted-foreground hover:text-foreground"
+          >
+            <ChevronLeft size={14} />
+          </button>
+          <span className="text-xs text-muted-foreground px-1 min-w-[72px] text-center">{weekLabel}</span>
+          <button
+            onClick={() => setWeekOffset(v => Math.min(0, v + 1))}
+            disabled={weekOffset === 0}
+            className="w-7 h-7 rounded-lg bg-secondary flex items-center justify-center text-muted-foreground hover:text-foreground disabled:opacity-40"
+          >
+            <ChevronRight size={14} />
+          </button>
+        </div>
+      </div>
+
+      <div className="bg-card border border-border rounded-2xl overflow-hidden">
+        {/* My position banner */}
+        {isAuthenticated && myPos && (
+          <div className="px-4 py-3 border-b border-border bg-primary/5 flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <div className="w-7 h-7 rounded-full bg-primary/20 flex items-center justify-center text-xs font-bold text-primary">#{myPos.rank}</div>
+              <div>
+                <p className="text-xs font-semibold text-foreground">{myPos.optedIn && myPos.displayName ? myPos.displayName : "You"}</p>
+                <p className="text-xs text-muted-foreground">{myPos.jobCount} jobs · £{myPos.netEarnings.toFixed(2)}</p>
+              </div>
+            </div>
+            <button
+              onClick={() => {
+                if (myPos.optedIn) {
+                  updateOptIn.mutate({ optedIn: false });
+                } else {
+                  setEditingName(true);
+                  setNameInput(myPos.displayName ?? "");
+                }
+              }}
+              className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground"
+            >
+              {myPos.optedIn ? <ToggleRight size={16} className="text-primary" /> : <ToggleLeft size={16} />}
+              <span>{myPos.optedIn ? "Listed" : "Join"}</span>
+            </button>
+          </div>
+        )}
+
+        {/* Name input when opting in */}
+        {editingName && (
+          <div className="px-4 py-3 border-b border-border bg-secondary/30 flex items-center gap-2">
+            <Input
+              value={nameInput}
+              onChange={e => setNameInput(e.target.value)}
+              placeholder="Display name (2-20 chars)"
+              maxLength={20}
+              className="h-8 text-sm flex-1"
+              autoFocus
+            />
+            <Button
+              size="sm"
+              disabled={nameInput.trim().length < 2}
+              onClick={() => {
+                updateOptIn.mutate({ optedIn: true, displayName: nameInput.trim() });
+                setEditingName(false);
+              }}
+            >Save</Button>
+            <Button size="sm" variant="ghost" onClick={() => setEditingName(false)}>Cancel</Button>
+          </div>
+        )}
+
+        {/* Table */}
+        {boardLoading ? (
+          <div className="flex items-center justify-center py-8">
+            <div className="w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+          </div>
+        ) : !board?.entries.length ? (
+          <div className="flex flex-col items-center justify-center py-8 gap-2">
+            <Users size={24} className="text-muted-foreground" />
+            <p className="text-sm text-muted-foreground">No completed jobs this week yet</p>
+          </div>
+        ) : (
+          <div className="divide-y divide-border">
+            {board.entries.slice(0, 10).map((entry) => (
+              <div key={entry.userId} className={cn(
+                "flex items-center gap-3 px-4 py-2.5",
+                entry.rank === 1 && "bg-yellow-500/5",
+                entry.rank === 2 && "bg-slate-400/5",
+                entry.rank === 3 && "bg-amber-700/5",
+              )}>
+                <span className={cn(
+                  "w-6 text-xs font-bold text-center shrink-0",
+                  entry.rank === 1 ? "text-yellow-400" : entry.rank === 2 ? "text-slate-400" : entry.rank === 3 ? "text-amber-600" : "text-muted-foreground"
+                )}>
+                  {entry.rank === 1 ? "🥇" : entry.rank === 2 ? "🥈" : entry.rank === 3 ? "🥉" : `#${entry.rank}`}
+                </span>
+                <span className="flex-1 text-sm text-foreground truncate">{entry.displayName}</span>
+                {entry.avgGrade && (
+                  <span className={cn("text-xs font-bold font-mono", gradeColor(entry.avgGrade))}>{entry.avgGrade}</span>
+                )}
+                <span className="text-sm font-mono font-semibold text-foreground">£{entry.netEarnings.toFixed(0)}</span>
+                <span className="text-xs text-muted-foreground shrink-0">{entry.jobCount}j</span>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export default function Badges() {
   const { isAuthenticated, loading } = useAuth();
   const { data, isLoading } = trpc.dashboard.badges.useQuery(undefined, {
@@ -194,6 +341,9 @@ export default function Badges() {
           </div>
         </div>
       </div>
+
+      {/* Leaderboard */}
+      <LeaderboardSection />
 
       {/* Badge categories */}
       <div className="px-4 space-y-6">

@@ -6,7 +6,7 @@ import {
   TrendingUp, MapPin, Clock, Zap, Star, Flame, Trophy,
   ChevronRight, RefreshCw, Navigation, Car, Calendar,
   ArrowRight, Sparkles, Target, Award, Fuel, Train, Building2,
-  Hash, CheckCircle2, XCircle, Circle
+  Hash, CheckCircle2, XCircle, Circle, PlusCircle, FileText
 } from "lucide-react";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Separator } from "@/components/ui/separator";
@@ -346,6 +346,59 @@ function WeeklyChart({ data }: { data: { day: string; netProfit: number; earning
   );
 }
 
+function WeeklySummaryCard() {
+  const { data: stats, isLoading } = trpc.dashboard.stats.useQuery();
+  const { data: myPos } = trpc.leaderboard.myPosition.useQuery({ weekOffset: 0 });
+  const [, navigate] = useLocation();
+
+  const week = stats?.week;
+  if (isLoading) return null;
+  if (!week || week.jobCount === 0) return null;
+
+  const ppm = week.miles > 0 ? week.netProfit / week.miles : 0;
+  const gradeFromPpm = ppm >= 0.7 ? "A+" : ppm >= 0.55 ? "A" : ppm >= 0.40 ? "B" : ppm >= 0.28 ? "C" : "D";
+  const gradeColor = (g: string) => {
+    if (g === "A+" || g === "A") return "text-emerald-400";
+    if (g === "B") return "text-blue-400";
+    if (g === "C") return "text-amber-400";
+    return "text-red-400";
+  };
+
+  return (
+    <div className="bg-gradient-to-br from-primary/10 to-primary/5 border border-primary/20 rounded-2xl p-4">
+      <div className="flex items-center justify-between mb-3">
+        <div className="flex items-center gap-2">
+          <Target size={14} className="text-primary" />
+          <span className="text-xs font-medium uppercase tracking-wide text-primary">Week Summary</span>
+        </div>
+        <button onClick={() => navigate("/reports")} className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-1">
+          Full report <ChevronRight size={12} />
+        </button>
+      </div>
+      <div className="grid grid-cols-3 gap-3 mb-3">
+        <div className="text-center">
+          <p className="text-lg font-black font-display text-foreground">£{week.netProfit.toFixed(0)}</p>
+          <p className="text-xs text-muted-foreground">Net profit</p>
+        </div>
+        <div className="text-center">
+          <p className={`text-lg font-black font-display ${gradeColor(gradeFromPpm)}`}>{gradeFromPpm}</p>
+          <p className="text-xs text-muted-foreground">Avg grade</p>
+        </div>
+        <div className="text-center">
+          <p className="text-lg font-black font-display text-foreground">{week.jobCount}</p>
+          <p className="text-xs text-muted-foreground">Jobs done</p>
+        </div>
+      </div>
+      <div className="flex items-center justify-between text-xs text-muted-foreground border-t border-border/50 pt-3">
+        <span>£{ppm.toFixed(2)}/mi · {week.miles.toFixed(0)} mi total</span>
+        {myPos && myPos.rank <= 10 && (
+          <span className="text-primary font-semibold">#{myPos.rank} this week 🏆</span>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function AIInsightsPanel() {
   const { data, isLoading, refetch, isFetching } = trpc.dashboard.aiInsights.useQuery(undefined, {
     staleTime: 5 * 60 * 1000,
@@ -476,6 +529,7 @@ function BadgePreview() {
 
 export default function Dashboard() {
   const { user, isAuthenticated, loading } = useAuth();
+  const [, navigate] = useLocation();
   const { data: stats, isLoading: statsLoading } = trpc.dashboard.stats.useQuery(undefined, {
     enabled: isAuthenticated,
     refetchInterval: 60000,
@@ -487,6 +541,14 @@ export default function Dashboard() {
   const { data: streakData } = trpc.dashboard.streak.useQuery(undefined, {
     enabled: isAuthenticated,
   });
+
+  // Draft jobs banner
+  const { data: draftJobsData } = trpc.jobs.list.useQuery(
+    { status: "draft" },
+    { enabled: isAuthenticated }
+  );
+  const draftJobs = draftJobsData?.jobs ?? [];
+  const hasDrafts = draftJobs.length > 0;
 
   const greeting = useMemo(() => {
     const h = new Date().getHours();
@@ -542,6 +604,46 @@ export default function Dashboard() {
       </div>
 
       <div className="px-4 space-y-4">
+        {/* Draft jobs banner */}
+        {hasDrafts && (
+          <motion.div
+            initial={{ opacity: 0, y: -8 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="flex items-center gap-3 p-3 rounded-xl bg-amber-500/10 border border-amber-500/30"
+          >
+            <FileText size={16} className="text-amber-400 shrink-0" />
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-semibold text-amber-300">
+                {draftJobs!.length} draft job{draftJobs!.length !== 1 ? "s" : ""} saved
+              </p>
+              <p className="text-xs text-muted-foreground truncate">Tap to review and confirm</p>
+            </div>
+            <button
+              onClick={() => navigate("/jobs?status=draft")}
+              className="text-xs text-amber-400 font-semibold shrink-0 flex items-center gap-1"
+            >
+              View <ChevronRight size={12} />
+            </button>
+          </motion.div>
+        )}
+
+        {/* Check a Job CTA */}
+        <button
+          onClick={() => navigate("/check")}
+          className="w-full flex items-center justify-between p-4 rounded-2xl bg-primary/10 border border-primary/30 hover:bg-primary/15 transition-colors"
+        >
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-primary/20 flex items-center justify-center">
+              <PlusCircle size={20} className="text-primary" />
+            </div>
+            <div className="text-left">
+              <p className="text-sm font-bold text-foreground">Check a Job</p>
+              <p className="text-xs text-muted-foreground">Is this booking worth it?</p>
+            </div>
+          </div>
+          <ArrowRight size={16} className="text-primary" />
+        </button>
+
         {/* Today's hero stats */}
         <div className="grid grid-cols-2 gap-3">
           <StatCard
@@ -582,7 +684,8 @@ export default function Dashboard() {
 
         {/* Weekly chart */}
         <WeeklyChart data={dailyData} />
-
+        {/* Weekly summary card */}
+        <WeeklySummaryCard />
         {/* AI Insights */}
         <AIInsightsPanel />
 

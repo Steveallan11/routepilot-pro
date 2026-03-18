@@ -1,0 +1,9 @@
+{
+  "query": "CREATE TABLE IF NOT EXISTS leaderboard_entries (id INT AUTO_INCREMENT PRIMARY KEY, userId INT NOT NULL, weekKey VARCHAR(10) NOT NULL, region VARCHAR(50) NULL, netEarnings DECIMAL(10,2) NOT NULL DEFAULT 0, jobCount INT NOT NULL DEFAULT 0, totalMiles DECIMAL(10,2) NOT NULL DEFAULT 0, avgGrade VARCHAR(3) NULL, leaderRank INT NULL, optedIn BOOLEAN NOT NULL DEFAULT FALSE, displayName VARCHAR(50) NULL, createdAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP, updatedAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP)",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway02.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 29dmg1z8s7MGkda.cd2f01f00c99 --database 6VTDyDwMUZs22XSbYJviE3 --execute CREATE TABLE IF NOT EXISTS leaderboard_entries (id INT AUTO_INCREMENT PRIMARY KEY, userId INT NOT NULL, weekKey VARCHAR(10) NOT NULL, region VARCHAR(50) NULL, netEarnings DECIMAL(10,2) NOT NULL DEFAULT 0, jobCount INT NOT NULL DEFAULT 0, totalMiles DECIMAL(10,2) NOT NULL DEFAULT 0, avgGrade VARCHAR(3) NULL, leaderRank INT NULL, optedIn BOOLEAN NOT NULL DEFAULT FALSE, displayName VARCHAR(50) NULL, createdAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP, updatedAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP)",
+  "rows": [],
+  "messages": [],
+  "stdout": "",
+  "stderr": "",
+  "execution_time_ms": 116
+}
