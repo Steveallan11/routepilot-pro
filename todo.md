@@ -497,3 +497,12 @@
 - [x] Landing page overhaul: hero headline, feature grid, pricing section, social proof
 - [x] 3-step onboarding wizard: set hourly rate, MPG, first job prompt
 - [x] Draft job expiry banner on Check page with "Book it" CTA
+
+## Route Planner Redesign (March 2026)
+
+- [x] Rewrite RouteFinder: clean job-first input panel (add jobs with postcodes + fees)
+- [x] Optimise Route button that calls AI to find best 3 route options from home/start address
+- [x] Route option summary cards: time, distance, cost, grade — collapsed by default
+- [x] Map showing the selected route option
+- [x] Expandable full directions panel per route option
+- [x] Save selected route as job (pre-fills Check page)

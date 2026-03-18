@@ -2,276 +2,121 @@ import { useState, useRef, useCallback, useEffect } from "react";
 import { MapView } from "@/components/Map";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Card, CardContent } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
 import { useAuth } from "@/_core/hooks/useAuth";
 import {
-  Train, Bus, Car, PersonStanding, Zap, Clock,
-  ChevronRight, MapPin, Loader2, CheckCircle2,
-  Navigation, TrendingDown, Timer, Scale, Star,
-  Trash2, CalendarClock, ChevronDown, ChevronUp,
-  Share2, History, Home
+  Car, MapPin, Zap, Clock, ChevronDown, ChevronUp,
+  Loader2, Navigation, TrendingDown, Timer, Scale,
+  Trash2, Plus, PoundSterling, Route, CheckCircle2,
+  ArrowRight, Home, Star
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { format, addMinutes } from "date-fns";
+import { useLocation } from "wouter";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
+interface JobStop {
+  id: string;
+  pickupPostcode: string;
+  dropoffPostcode: string;
+  deliveryFee: string;
+}
 
-interface TransitLeg {
-  mode: "TRANSIT" | "WALKING" | "DRIVING";
-  transitMode?: "TRAIN" | "SUBWAY" | "BUS" | "TRAM" | "FERRY" | "RAIL";
-  lineName?: string;
-  lineShortName?: string;
-  lineColour?: string;
-  departureStop?: string;
-  arrivalStop?: string;
-  departureTime?: string;
-  arrivalTime?: string;
-  numStops?: number;
-  durationSecs: number;
-  distanceMetres: number;
-  polyline: string;
-  startLocation: { lat: number; lng: number };
-  endLocation: { lat: number; lng: number };
-  instructions?: string;
-  estimatedFare?: number;
+interface RouteStep {
+  instruction: string;
+  distanceText: string;
+  durationText: string;
 }
 
 interface RouteOption {
-  id: string;
-  label: "fastest" | "cheapest" | "balanced";
-  summary: string;
+  id: "fastest" | "balanced" | "cheapest";
+  label: string;
+  tagline: string;
   totalDurationSecs: number;
-  totalDistanceMetres: number;
-  estimatedCost: number;
-  legs: TransitLeg[];
-  departureTime?: string;
-  arrivalTime?: string;
+  totalDistanceMiles: number;
+  fuelCostEstimate: number;
+  netProfit: number;
+  grade: "A+" | "A" | "B" | "C" | "D";
+  polylines: string[];
+  waypoints: Array<{ lat: number; lng: number; label: string }>;
+  steps: RouteStep[];
   warnings: string[];
 }
 
-// ─── UK Rail fare model (ATOC-based distance bands) ──────────────────────────
-// Based on published UK rail fare data: Anytime Single prices by distance band
-
-function estimateRailFare(distanceKm: number): number {
-  // UK rail fare bands (Anytime Single, approximate)
-  if (distanceKm < 10)  return 3.50;
-  if (distanceKm < 20)  return 6.00;
-  if (distanceKm < 40)  return 10.50;
-  if (distanceKm < 60)  return 15.00;
-  if (distanceKm < 80)  return 19.50;
-  if (distanceKm < 100) return 24.00;
-  if (distanceKm < 150) return 32.00;
-  if (distanceKm < 200) return 42.00;
-  if (distanceKm < 300) return 58.00;
-  return 75.00; // 300km+
-}
-
-function estimateCost(legs: TransitLeg[]): number {
-  let cost = 0;
-  for (const leg of legs) {
-    if (leg.mode === "TRANSIT") {
-      const distKm = leg.distanceMetres / 1000;
-      if (leg.transitMode === "TRAIN" || leg.transitMode === "RAIL") {
-        const fare = estimateRailFare(distKm);
-        leg.estimatedFare = fare;
-        cost += fare;
-      } else if (leg.transitMode === "SUBWAY") {
-        // London Underground: zone-based, typical £2.80–£5.25
-        leg.estimatedFare = distKm < 10 ? 2.80 : 4.50;
-        cost += leg.estimatedFare;
-      } else if (leg.transitMode === "BUS" || leg.transitMode === "TRAM") {
-        // UK bus: £2.00 cap (England bus fare cap)
-        leg.estimatedFare = 2.00;
-        cost += 2.00;
-      } else {
-        leg.estimatedFare = 2.50;
-        cost += 2.50;
-      }
-    }
-  }
-  return Math.round(cost * 100) / 100;
-}
-
-// ─── Colour coding ────────────────────────────────────────────────────────────
-
-const LEG_COLOURS: Record<string, string> = {
-  TRAIN: "#3B82F6",
-  RAIL: "#3B82F6",
-  SUBWAY: "#8B5CF6",
-  BUS: "#F97316",
-  TRAM: "#10B981",
-  FERRY: "#06B6D4",
-  WALKING: "#6B7280",
-  DRIVING: "#EF4444",
-};
-
-function getLegColour(leg: TransitLeg): string {
-  if (leg.mode === "WALKING") return LEG_COLOURS.WALKING;
-  if (leg.mode === "DRIVING") return LEG_COLOURS.DRIVING;
-  return leg.lineColour ? `#${leg.lineColour}` : (LEG_COLOURS[leg.transitMode ?? "BUS"] ?? "#F97316");
-}
-
-function getLegIcon(leg: TransitLeg) {
-  if (leg.mode === "WALKING") return <PersonStanding size={14} />;
-  if (leg.mode === "DRIVING") return <Car size={14} />;
-  switch (leg.transitMode) {
-    case "TRAIN": case "RAIL": return <Train size={14} />;
-    case "BUS": return <Bus size={14} />;
-    default: return <Train size={14} />;
-  }
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+function makeStop(): JobStop {
+  return { id: Math.random().toString(36).slice(2), pickupPostcode: "", dropoffPostcode: "", deliveryFee: "" };
 }
 
 function formatDuration(secs: number): string {
   const h = Math.floor(secs / 3600);
-  const m = Math.floor((secs % 3600) / 60);
-  if (h > 0) return `${h}h ${m}m`;
-  return `${m} min`;
+  const m = Math.round((secs % 3600) / 60);
+  if (h === 0) return `${m}m`;
+  return m === 0 ? `${h}h` : `${h}h ${m}m`;
 }
 
-// ─── Parse Google Directions result ──────────────────────────────────────────
-
-function parseTransitResult(route: google.maps.DirectionsRoute): TransitLeg[] {
-  const legs: TransitLeg[] = [];
-  for (const leg of route.legs) {
-    for (const step of leg.steps) {
-      const mode = step.travel_mode as string;
-      const transitDetails = (step as any).transit;
-      const polyline = step.polyline?.points ?? "";
-      const startLoc = { lat: step.start_location.lat(), lng: step.start_location.lng() };
-      const endLoc = { lat: step.end_location.lat(), lng: step.end_location.lng() };
-
-      if (mode === "TRANSIT" && transitDetails) {
-        const line = transitDetails.line ?? {};
-        const vehicle = line.vehicle ?? {};
-        const vehicleType = (vehicle.type as string ?? "BUS").toUpperCase();
-        legs.push({
-          mode: "TRANSIT",
-          transitMode: vehicleType as TransitLeg["transitMode"],
-          lineName: line.name ?? line.short_name ?? "",
-          lineShortName: line.short_name ?? "",
-          lineColour: line.color?.replace("#", "") ?? "",
-          departureStop: transitDetails.departure_stop?.name ?? "",
-          arrivalStop: transitDetails.arrival_stop?.name ?? "",
-          departureTime: transitDetails.departure_time?.text ?? "",
-          arrivalTime: transitDetails.arrival_time?.text ?? "",
-          numStops: transitDetails.num_stops ?? 0,
-          durationSecs: step.duration?.value ?? 0,
-          distanceMetres: step.distance?.value ?? 0,
-          polyline, startLocation: startLoc, endLocation: endLoc,
-        });
-      } else if (mode === "WALKING") {
-        legs.push({
-          mode: "WALKING",
-          durationSecs: step.duration?.value ?? 0,
-          distanceMetres: step.distance?.value ?? 0,
-          polyline, startLocation: startLoc, endLocation: endLoc,
-          instructions: step.instructions ?? "",
-        });
-      } else {
-        legs.push({
-          mode: "DRIVING",
-          durationSecs: step.duration?.value ?? 0,
-          distanceMetres: step.distance?.value ?? 0,
-          polyline, startLocation: startLoc, endLocation: endLoc,
-          instructions: step.instructions ?? "",
-        });
-      }
-    }
+function gradeColour(grade: string) {
+  switch (grade) {
+    case "A+": return "text-emerald-400 bg-emerald-400/10 border-emerald-400/30";
+    case "A":  return "text-green-400 bg-green-400/10 border-green-400/30";
+    case "B":  return "text-blue-400 bg-blue-400/10 border-blue-400/30";
+    case "C":  return "text-amber-400 bg-amber-400/10 border-amber-400/30";
+    default:   return "text-red-400 bg-red-400/10 border-red-400/30";
   }
-  return legs;
 }
 
-// ─── Component ────────────────────────────────────────────────────────────────
+const OPTION_CONFIG = {
+  fastest:  { icon: Timer,      colour: "text-blue-400",   bg: "bg-blue-400/10 border-blue-400/30",   label: "Fastest" },
+  balanced: { icon: Scale,      colour: "text-primary",    bg: "bg-primary/10 border-primary/30",     label: "Best Value" },
+  cheapest: { icon: TrendingDown, colour: "text-emerald-400", bg: "bg-emerald-400/10 border-emerald-400/30", label: "Cheapest" },
+};
 
-interface RouteFinderProps {
-  initialFrom?: string;
-  initialTo?: string;
-  onUseRoute?: (cost: number, mode: string, summary: string) => void;
-}
-
-export default function RouteFinder({ initialFrom = "", initialTo = "", onUseRoute }: RouteFinderProps) {
+// ─── Main Component ───────────────────────────────────────────────────────────
+export default function RouteFinder() {
   const { isAuthenticated } = useAuth();
-  const [from, setFrom] = useState(initialFrom);
-  const [to, setTo] = useState(initialTo);
+  const [, navigate] = useLocation();
+
+  const [startPostcode, setStartPostcode] = useState("");
+  const [stops, setStops] = useState<JobStop[]>([makeStop()]);
   const [loading, setLoading] = useState(false);
   const [routes, setRoutes] = useState<RouteOption[]>([]);
-  const [selectedRoute, setSelectedRoute] = useState<RouteOption | null>(null);
+  const [selectedId, setSelectedId] = useState<RouteOption["id"] | null>(null);
+  const [expandedId, setExpandedId] = useState<RouteOption["id"] | null>(null);
   const [mapReady, setMapReady] = useState(false);
-  const [showTimeOptions, setShowTimeOptions] = useState(false);
-  const [departureMode, setDepartureMode] = useState<"now" | "custom">("now");
-  const [departureDate, setDepartureDate] = useState(() => format(new Date(), "yyyy-MM-dd"));
-  const [departureTime, setDepartureTime] = useState(() => format(addMinutes(new Date(), 5), "HH:mm"));
-  const [showFavourites, setShowFavourites] = useState(false);
-  const [savingFav, setSavingFav] = useState(false);
-  const [favName, setFavName] = useState("");
-  const [showSaveFav, setShowSaveFav] = useState(false);
-  const [showHistory, setShowHistory] = useState(false);
-  const [sharingId, setSharingId] = useState<number | null>(null);
+  const [savingId, setSavingId] = useState<RouteOption["id"] | null>(null);
 
   const mapRef = useRef<google.maps.Map | null>(null);
   const polylinesRef = useRef<google.maps.Polyline[]>([]);
   const markersRef = useRef<google.maps.marker.AdvancedMarkerElement[]>([]);
 
-  // tRPC: favourites
-  const { data: favourites, refetch: refetchFavs } = trpc.routes.listFavourites.useQuery(undefined, {
-    enabled: isAuthenticated,
-  });
-  const saveFavMutation = trpc.routes.saveFavourite.useMutation({
-    onSuccess: () => { refetchFavs(); setShowSaveFav(false); setFavName(""); toast.success("Route saved to favourites"); },
-    onError: () => toast.error("Failed to save favourite"),
-  });
-  const deleteFavMutation = trpc.routes.deleteFavourite.useMutation({
-    onSuccess: () => refetchFavs(),
-  });
-
-  // tRPC: history
-  const { data: historyItems, refetch: refetchHistory } = trpc.routes.listHistory.useQuery(
-    { limit: 20 },
-    { enabled: isAuthenticated }
-  );
-  const saveToHistoryMutation = trpc.routes.saveToHistory.useMutation({
-    onSuccess: () => refetchHistory(),
-  });
-  const deleteHistoryMutation = trpc.routes.deleteHistory.useMutation({
-    onSuccess: () => refetchHistory(),
-  });
-
-  // tRPC: share
-  const createShareMutation = trpc.routes.createShare.useMutation({
-    onSuccess: (data) => {
-      const url = `${window.location.origin}/shared-route/${data.token}`;
-      navigator.clipboard.writeText(url).then(() => {
-        toast.success("Share link copied to clipboard! Valid for 7 days.");
-      }).catch(() => {
-        toast.info(`Share link: ${url}`);
-      });
-      setSharingId(null);
-    },
-    onError: () => { toast.error("Failed to create share link"); setSharingId(null); },
-  });
-
-  // tRPC: settings (for home postcode)
   const { data: settings } = trpc.settings.get.useQuery(undefined, { enabled: isAuthenticated });
+  const createJobMutation = trpc.jobs.create.useMutation();
 
-  // Auto-fill From with home postcode if empty
+  // Auto-fill start postcode from settings
   useEffect(() => {
-    if (settings?.homePostcode && !from) {
-      setFrom(settings.homePostcode.toUpperCase());
+    if (settings?.homePostcode && !startPostcode) {
+      setStartPostcode(settings.homePostcode.toUpperCase());
     }
   }, [settings?.homePostcode]);
 
-  // Read URL params on mount
-  useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const f = params.get("from");
-    const t = params.get("to");
-    if (f) setFrom(f.toUpperCase());
-    if (t) setTo(t.toUpperCase());
-  }, []);
+  // ── Stop helpers ──────────────────────────────────────────────────────────
+  const updateStop = (id: string, key: keyof JobStop, value: string) =>
+    setStops(prev => prev.map(s => s.id === id ? { ...s, [key]: value } : s));
 
+  const addStop = () => {
+    if (stops.length >= 4) { toast.info("Maximum 4 jobs per route"); return; }
+    const last = stops[stops.length - 1];
+    const next = makeStop();
+    if (last?.dropoffPostcode) next.pickupPostcode = last.dropoffPostcode;
+    setStops(prev => [...prev, next]);
+  };
+
+  const removeStop = (id: string) => {
+    if (stops.length === 1) return;
+    setStops(prev => prev.filter(s => s.id !== id));
+  };
+
+  // ── Map helpers ───────────────────────────────────────────────────────────
   const clearMap = useCallback(() => {
     polylinesRef.current.forEach(p => p.setMap(null));
     polylinesRef.current = [];
@@ -284,749 +129,536 @@ export default function RouteFinder({ initialFrom = "", initialTo = "", onUseRou
     clearMap();
     const bounds = new window.google.maps.LatLngBounds();
 
-    route.legs.forEach((leg, i) => {
-      const colour = getLegColour(leg);
-      const decoded = window.google.maps.geometry.encoding.decodePath(leg.polyline);
+    // Draw polylines
+    route.polylines.forEach(encoded => {
+      const decoded = window.google.maps.geometry.encoding.decodePath(encoded);
       decoded.forEach(p => bounds.extend(p));
-
-      const polyline = new window.google.maps.Polyline({
+      const poly = new window.google.maps.Polyline({
         path: decoded,
-        strokeColor: colour,
-        strokeOpacity: 0.9,
-        strokeWeight: leg.mode === "WALKING" ? 3 : 5,
-        icons: leg.mode === "WALKING" ? [{
-          icon: { path: "M 0,-1 0,1", strokeOpacity: 1, scale: 3 },
-          offset: "0", repeat: "12px",
-        }] : undefined,
+        strokeColor: "#2D7DD2",
+        strokeOpacity: 0.85,
+        strokeWeight: 5,
       });
-      polyline.setMap(mapRef.current!);
-      polylinesRef.current.push(polyline);
-
-      if (i > 0) {
-        const el = document.createElement("div");
-        el.style.cssText = `width:10px;height:10px;background:${colour};border:2px solid white;border-radius:50%;box-shadow:0 1px 4px rgba(0,0,0,0.4)`;
-        markersRef.current.push(new window.google.maps.marker.AdvancedMarkerElement({
-          map: mapRef.current!, position: leg.startLocation, content: el,
-          title: leg.departureStop ?? leg.mode,
-        }));
-      }
+      poly.setMap(mapRef.current!);
+      polylinesRef.current.push(poly);
     });
 
-    const startEl = document.createElement("div");
-    startEl.innerHTML = `<div style="background:#22C55E;color:white;padding:4px 8px;border-radius:12px;font-size:11px;font-weight:700;white-space:nowrap;box-shadow:0 2px 6px rgba(0,0,0,0.4)">▶ ${from.toUpperCase()}</div>`;
-    markersRef.current.push(new window.google.maps.marker.AdvancedMarkerElement({
-      map: mapRef.current!, position: route.legs[0].startLocation, content: startEl,
-    }));
-
-    const endEl = document.createElement("div");
-    endEl.innerHTML = `<div style="background:#EF4444;color:white;padding:4px 8px;border-radius:12px;font-size:11px;font-weight:700;white-space:nowrap;box-shadow:0 2px 6px rgba(0,0,0,0.4)">■ ${to.toUpperCase()}</div>`;
-    markersRef.current.push(new window.google.maps.marker.AdvancedMarkerElement({
-      map: mapRef.current!, position: route.legs[route.legs.length - 1].endLocation, content: endEl,
-    }));
+    // Draw waypoint markers
+    route.waypoints.forEach((wp, i) => {
+      const isFirst = i === 0;
+      const isLast = i === route.waypoints.length - 1;
+      const el = document.createElement("div");
+      el.innerHTML = `<div style="background:${isFirst ? "#22C55E" : isLast ? "#EF4444" : "#2D7DD2"};color:white;padding:3px 8px;border-radius:10px;font-size:10px;font-weight:700;white-space:nowrap;box-shadow:0 2px 6px rgba(0,0,0,0.4)">${wp.label}</div>`;
+      markersRef.current.push(new window.google.maps.marker.AdvancedMarkerElement({
+        map: mapRef.current!, position: { lat: wp.lat, lng: wp.lng }, content: el,
+      }));
+      bounds.extend({ lat: wp.lat, lng: wp.lng });
+    });
 
     mapRef.current!.fitBounds(bounds, { top: 60, bottom: 60, left: 20, right: 20 });
-  }, [clearMap, from, to]);
+  }, [clearMap]);
 
-  const getDepartureDate = useCallback((): Date => {
-    if (departureMode === "now") return new Date();
-    const [y, mo, d] = departureDate.split("-").map(Number);
-    const [h, mi] = departureTime.split(":").map(Number);
-    return new Date(y, mo - 1, d, h, mi);
-  }, [departureMode, departureDate, departureTime]);
+  // ── Route optimisation ────────────────────────────────────────────────────
+  const optimiseRoute = useCallback(async () => {
+    const validStops = stops.filter(s => s.pickupPostcode.trim() && s.dropoffPostcode.trim());
+    if (validStops.length === 0) {
+      toast.error("Add at least one job with pickup and drop-off postcodes");
+      return;
+    }
+    if (!mapRef.current) {
+      toast.error("Map not ready — please wait a moment");
+      return;
+    }
 
-  const searchRoutes = useCallback(async () => {
-    if (!from.trim() || !to.trim()) { toast.error("Please enter both postcodes"); return; }
-    if (!mapRef.current) { toast.error("Map not ready yet"); return; }
     setLoading(true);
     setRoutes([]);
-    setSelectedRoute(null);
+    setSelectedId(null);
+    setExpandedId(null);
     clearMap();
 
     try {
       const directionsService = new window.google.maps.DirectionsService();
-      const depTime = getDepartureDate();
+      const origin = startPostcode.trim() ? `${startPostcode.trim()}, UK` : `${validStops[0].pickupPostcode.trim()}, UK`;
 
-      const transitRequest: google.maps.DirectionsRequest = {
-        origin: `${from.trim()}, UK`,
-        destination: `${to.trim()}, UK`,
-        travelMode: google.maps.TravelMode.TRANSIT,
-        provideRouteAlternatives: true,
-        transitOptions: {
-          departureTime: depTime,
-          modes: [
-            google.maps.TransitMode.BUS,
-            google.maps.TransitMode.RAIL,
-            google.maps.TransitMode.SUBWAY,
-            google.maps.TransitMode.TRAIN,
-            google.maps.TransitMode.TRAM,
-          ],
-          routingPreference: google.maps.TransitRoutePreference.FEWER_TRANSFERS,
-        },
-        unitSystem: google.maps.UnitSystem.IMPERIAL,
-      };
+      // Build waypoints for all stops (pickup → dropoff for each)
+      const allWaypoints: string[] = [];
+      validStops.forEach((s, i) => {
+        if (i === 0) {
+          // origin is the pickup of first job
+        } else {
+          allWaypoints.push(`${s.pickupPostcode.trim()}, UK`);
+        }
+        allWaypoints.push(`${s.dropoffPostcode.trim()}, UK`);
+      });
+      const destination = allWaypoints.pop() ?? `${validStops[0].dropoffPostcode.trim()}, UK`;
 
-      const drivingRequest: google.maps.DirectionsRequest = {
-        origin: `${from.trim()}, UK`,
-        destination: `${to.trim()}, UK`,
-        travelMode: google.maps.TravelMode.DRIVING,
-        unitSystem: google.maps.UnitSystem.IMPERIAL,
-      };
+      const waypointObjs = allWaypoints.map(loc => ({ location: loc, stopover: true }));
 
-      const [transitResult, drivingResult] = await Promise.allSettled([
-        new Promise<google.maps.DirectionsResult>((resolve, reject) =>
-          directionsService.route(transitRequest, (res, status) =>
+      // Request 3 variants: default, avoid tolls, avoid highways
+      const requests: google.maps.DirectionsRequest[] = [
+        { origin, destination, waypoints: waypointObjs, travelMode: google.maps.TravelMode.DRIVING, provideRouteAlternatives: true, unitSystem: google.maps.UnitSystem.IMPERIAL },
+        { origin, destination, waypoints: waypointObjs, travelMode: google.maps.TravelMode.DRIVING, avoidTolls: true, unitSystem: google.maps.UnitSystem.IMPERIAL },
+        { origin, destination, waypoints: waypointObjs, travelMode: google.maps.TravelMode.DRIVING, avoidHighways: true, unitSystem: google.maps.UnitSystem.IMPERIAL },
+      ];
+
+      const results = await Promise.allSettled(
+        requests.map(req => new Promise<google.maps.DirectionsResult>((resolve, reject) =>
+          directionsService.route(req, (res, status) =>
             status === "OK" && res ? resolve(res) : reject(new Error(status))
           )
-        ),
-        new Promise<google.maps.DirectionsResult>((resolve, reject) =>
-          directionsService.route(drivingRequest, (res, status) =>
-            status === "OK" && res ? resolve(res) : reject(new Error(status))
-          )
-        ),
-      ]);
+        ))
+      );
+
+      const totalFee = validStops.reduce((s, j) => s + (Number(j.deliveryFee) || 0), 0);
+      const mpg = settings?.vehicleMpg ?? 35;
+      const fuelPencePerLitre = 145; // approx UK average
 
       const candidates: RouteOption[] = [];
+      const seenDurations = new Set<number>();
 
-      if (transitResult.status === "fulfilled") {
-        transitResult.value.routes.forEach((route, idx) => {
-          const legs = parseTransitResult(route);
-          const cost = estimateCost(legs);
-          const totalDuration = route.legs.reduce((s, l) => s + (l.duration?.value ?? 0), 0);
-          const totalDistance = route.legs.reduce((s, l) => s + (l.distance?.value ?? 0), 0);
-          const firstLeg = route.legs[0];
-          const lastLeg = route.legs[route.legs.length - 1];
-          candidates.push({
-            id: `transit-${idx}`,
-            label: "fastest",
-            summary: route.summary || `Transit route ${idx + 1}`,
-            totalDurationSecs: totalDuration,
-            totalDistanceMetres: totalDistance,
-            estimatedCost: cost,
-            legs,
-            departureTime: (firstLeg as any).departure_time?.text,
-            arrivalTime: (lastLeg as any).arrival_time?.text,
-            warnings: route.warnings ?? [],
+      results.forEach((res, idx) => {
+        if (res.status !== "fulfilled") return;
+        const gmRoute = res.value.routes[0];
+        if (!gmRoute) return;
+
+        const totalDuration = gmRoute.legs.reduce((s, l) => s + (l.duration?.value ?? 0), 0);
+        const totalDistanceMetres = gmRoute.legs.reduce((s, l) => s + (l.distance?.value ?? 0), 0);
+        const totalDistanceMiles = totalDistanceMetres / 1609.34;
+
+        // Deduplicate by duration (within 2 min)
+        const rounded = Math.round(totalDuration / 120) * 120;
+        if (seenDurations.has(rounded)) return;
+        seenDurations.add(rounded);
+
+        // Fuel cost
+        const litresPerMile = 4.546 / mpg;
+        const fuelCostEstimate = Math.round(totalDistanceMiles * litresPerMile * fuelPencePerLitre) / 100;
+
+        // Net profit
+        const netProfit = Math.round((totalFee - fuelCostEstimate) * 100) / 100;
+        const profitPerHour = totalDuration > 0 ? (netProfit / (totalDuration / 3600)) : 0;
+
+        // Grade
+        let grade: RouteOption["grade"] = "D";
+        if (profitPerHour >= 18) grade = "A+";
+        else if (profitPerHour >= 14) grade = "A";
+        else if (profitPerHour >= 10) grade = "B";
+        else if (profitPerHour >= 6) grade = "C";
+
+        // Extract polylines and steps
+        const polylines: string[] = [];
+        const steps: RouteStep[] = [];
+        gmRoute.legs.forEach(leg => {
+          leg.steps?.forEach(step => {
+            if (step.polyline?.points) polylines.push(step.polyline.points);
+            steps.push({
+              instruction: step.instructions?.replace(/<[^>]*>/g, "") ?? "",
+              distanceText: step.distance?.text ?? "",
+              durationText: step.duration?.text ?? "",
+            });
           });
         });
-      }
 
-      if (drivingResult.status === "fulfilled") {
-        const route = drivingResult.value.routes[0];
-        if (route) {
-          const legs = parseTransitResult(route);
-          const totalDuration = route.legs.reduce((s, l) => s + (l.duration?.value ?? 0), 0);
-          const totalDistance = route.legs.reduce((s, l) => s + (l.distance?.value ?? 0), 0);
-          const distMiles = totalDistance / 1609.34;
-          const drivingCost = distMiles * 0.15 + 5;
-          candidates.push({
-            id: "driving",
-            label: "fastest",
-            summary: "Drive / Taxi",
-            totalDurationSecs: totalDuration,
-            totalDistanceMetres: totalDistance,
-            estimatedCost: Math.round(drivingCost * 100) / 100,
-            legs,
-            warnings: route.warnings ?? [],
-          });
+        // Build waypoints for markers
+        const waypoints: RouteOption["waypoints"] = [];
+        if (startPostcode.trim()) {
+          const firstLeg = gmRoute.legs[0];
+          waypoints.push({ lat: firstLeg.start_location.lat(), lng: firstLeg.start_location.lng(), label: startPostcode.toUpperCase() });
         }
-      }
+        validStops.forEach((s, i) => {
+          const leg = gmRoute.legs[i] ?? gmRoute.legs[gmRoute.legs.length - 1];
+          if (i === 0 && !startPostcode.trim()) {
+            waypoints.push({ lat: leg.start_location.lat(), lng: leg.start_location.lng(), label: s.pickupPostcode.toUpperCase() });
+          }
+          waypoints.push({ lat: leg.end_location.lat(), lng: leg.end_location.lng(), label: s.dropoffPostcode.toUpperCase() });
+        });
+
+        const idMap: RouteOption["id"][] = ["fastest", "balanced", "cheapest"];
+        candidates.push({
+          id: idMap[candidates.length] ?? "balanced",
+          label: OPTION_CONFIG[idMap[candidates.length] ?? "balanced"].label,
+          tagline: idx === 0 ? "Quickest route" : idx === 1 ? "Avoids toll roads" : "Avoids motorways",
+          totalDurationSecs: totalDuration,
+          totalDistanceMiles: Math.round(totalDistanceMiles * 10) / 10,
+          fuelCostEstimate,
+          netProfit,
+          grade,
+          polylines,
+          waypoints,
+          steps,
+          warnings: gmRoute.warnings ?? [],
+        });
+      });
 
       if (candidates.length === 0) {
-        toast.error("No routes found. Try nearby town names instead of postcodes.");
+        toast.error("No routes found. Check your postcodes and try again.");
         setLoading(false);
         return;
       }
 
+      // Sort: fastest first, then by net profit for balanced, then cheapest fuel
       const sorted = [...candidates].sort((a, b) => a.totalDurationSecs - b.totalDurationSecs);
-      const byCost = [...candidates].sort((a, b) => a.estimatedCost - b.estimatedCost);
-      const byBalance = [...candidates].sort((a, b) => {
-        const scoreA = a.estimatedCost + (a.totalDurationSecs / 60) * 0.20;
-        const scoreB = b.estimatedCost + (b.totalDurationSecs / 60) * 0.20;
-        return scoreA - scoreB;
+      const byProfit = [...candidates].sort((a, b) => b.netProfit - a.netProfit);
+      const byCost = [...candidates].sort((a, b) => a.fuelCostEstimate - b.fuelCostEstimate);
+
+      const final: RouteOption[] = [];
+      const used = new Set<string>();
+      const push = (r: RouteOption, id: RouteOption["id"]) => {
+        if (!used.has(r.id)) { used.add(r.id); final.push({ ...r, id, label: OPTION_CONFIG[id].label }); }
+      };
+      if (sorted[0]) push(sorted[0], "fastest");
+      if (byProfit[0]) push(byProfit[0], "balanced");
+      if (byCost[0]) push(byCost[0], "cheapest");
+      // Fill remaining slots
+      candidates.forEach(c => {
+        if (!used.has(c.id) && final.length < 3) push(c, c.id);
       });
 
-      const labelled: RouteOption[] = [];
-      const used = new Set<string>();
-      const addUnique = (r: RouteOption, label: RouteOption["label"]) => {
-        if (!used.has(r.id)) { used.add(r.id); labelled.push({ ...r, label }); }
-        else labelled.push({ ...r, id: `${r.id}-${label}`, label });
-      };
-      addUnique(sorted[0], "fastest");
-      addUnique(byCost[0], "cheapest");
-      addUnique(byBalance[0], "balanced");
-      candidates.forEach(r => { if (!used.has(r.id)) { used.add(r.id); labelled.push(r); } });
-
-      setRoutes(labelled);
-      const balanced = labelled.find(r => r.label === "balanced") ?? labelled[0];
-      setSelectedRoute(balanced);
-      drawRoute(balanced);
-      setShowSaveFav(true);
-
-      // Auto-save to history
-      if (isAuthenticated) {
-        const legs = balanced.legs.map(l => ({
-          mode: l.mode,
-          summary: l.lineName ?? l.mode,
-          durationSecs: l.durationSecs,
-          distanceMetres: l.distanceMetres,
-          departureTime: l.departureTime,
-          arrivalTime: l.arrivalTime,
-          lineName: l.lineName,
-          departureStop: l.departureStop,
-          arrivalStop: l.arrivalStop,
-          numStops: l.numStops,
-          polyline: l.polyline,
-          estimatedFare: l.estimatedFare,
-        }));
-        saveToHistoryMutation.mutate({
-          fromPostcode: from,
-          toPostcode: to,
-          label: balanced.label,
-          summary: balanced.summary,
-          totalDurationSecs: balanced.totalDurationSecs,
-          totalDistanceMetres: balanced.totalDistanceMetres,
-          estimatedCost: balanced.estimatedCost,
-          dominantMode: balanced.legs.find(l => l.mode === "TRANSIT")?.transitMode ?? "DRIVING",
-          departureTime: balanced.departureTime,
-          arrivalTime: balanced.arrivalTime,
-          legs,
-        });
-      }
+      setRoutes(final);
+      const best = final.find(r => r.id === "balanced") ?? final[0];
+      setSelectedId(best.id);
+      drawRoute(best);
 
     } catch (err) {
       console.error(err);
-      toast.error("Failed to fetch routes. Check postcodes and try again.");
+      toast.error("Failed to calculate route. Check postcodes and try again.");
     } finally {
       setLoading(false);
     }
-  }, [from, to, clearMap, drawRoute, getDepartureDate]);
+  }, [stops, startPostcode, settings, clearMap, drawRoute]);
 
+  // ── Select route ──────────────────────────────────────────────────────────
   const handleSelectRoute = useCallback((route: RouteOption) => {
-    setSelectedRoute(route);
+    setSelectedId(route.id);
     drawRoute(route);
   }, [drawRoute]);
 
-  const labelConfig = {
-    fastest: { icon: <Timer size={12} />, colour: "text-blue-400 border-blue-400/30 bg-blue-400/10", label: "Fastest" },
-    cheapest: { icon: <TrendingDown size={12} />, colour: "text-green-400 border-green-400/30 bg-green-400/10", label: "Cheapest" },
-    balanced: { icon: <Scale size={12} />, colour: "text-amber-400 border-amber-400/30 bg-amber-400/10", label: "Best Value" },
-  };
+  // ── Save as job ───────────────────────────────────────────────────────────
+  const handleSaveAsJob = useCallback(async (route: RouteOption) => {
+    const validStops = stops.filter(s => s.pickupPostcode.trim() && s.dropoffPostcode.trim());
+    if (validStops.length === 0) return;
+    setSavingId(route.id);
+    try {
+      const firstStop = validStops[0];
+      const totalFee = validStops.reduce((s, j) => s + (Number(j.deliveryFee) || 0), 0);
+      await createJobMutation.mutateAsync({
+        pickupPostcode: firstStop.pickupPostcode.trim().toUpperCase(),
+        dropoffPostcode: validStops[validStops.length - 1].dropoffPostcode.trim().toUpperCase(),
+        deliveryFee: totalFee,
+        scannedDistanceMiles: route.totalDistanceMiles,
+        scannedDurationMins: Math.round(route.totalDurationSecs / 60),
+      });
+      toast.success("Job saved to your Jobs list");
+      navigate("/jobs");
+    } catch {
+      toast.error("Failed to save job");
+    } finally {
+      setSavingId(null);
+    }
+  }, [stops, createJobMutation, navigate]);
 
-  const depLabel = departureMode === "now"
-    ? "Departing now"
-    : `Departing ${format(getDepartureDate(), "EEE d MMM 'at' HH:mm")}`;
+  const selectedRoute = routes.find(r => r.id === selectedId) ?? null;
+  const validStops = stops.filter(s => s.pickupPostcode.trim() && s.dropoffPostcode.trim());
+  const canOptimise = validStops.length > 0;
 
   return (
-    <div className="flex flex-col min-h-screen bg-background pb-24">
-      {/* Header */}
-      <div className="sticky top-0 z-10 bg-background border-b border-border px-4 py-3">
-        <h1 className="text-lg font-bold text-foreground flex items-center gap-2">
-          <Navigation size={18} className="text-primary" />
-          Route Finder
-        </h1>
-        <p className="text-xs text-muted-foreground">Find the best way to reposition between jobs</p>
+    <div className="flex flex-col min-h-screen bg-background pb-28">
+
+      {/* ── Header ─────────────────────────────────────────────────────────── */}
+      <div className="px-4 pt-5 pb-3">
+        <div className="flex items-center gap-2 mb-1">
+          <div className="w-8 h-8 rounded-lg bg-primary/20 flex items-center justify-center">
+            <Route size={17} className="text-primary" />
+          </div>
+          <h1 className="text-xl font-bold text-foreground">Route Optimiser</h1>
+        </div>
+        <p className="text-sm text-muted-foreground">Add your jobs, then let AI find the best route.</p>
       </div>
 
-      <div className="px-4 py-4 space-y-4">
+      <div className="px-4 space-y-4">
 
-        {/* Favourites bar */}
-        {isAuthenticated && (favourites?.length ?? 0) > 0 && (
-          <Card className="bg-card border-border">
-            <div
-              className="flex items-center justify-between px-4 py-2.5 cursor-pointer"
-              onClick={() => setShowFavourites(s => !s)}
-            >
-              <div className="flex items-center gap-2 text-sm font-medium text-foreground">
-                <Star size={14} className="text-amber-400" />
-                Saved Routes ({favourites!.length})
-              </div>
-              {showFavourites ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
-            </div>
-            {showFavourites && (
-              <div className="px-4 pb-3 space-y-2 border-t border-border pt-2">
-                {favourites!.map((fav: any) => (
-                  <div key={fav.id} className="flex items-center gap-2">
-                    <button
-                      className="flex-1 text-left text-sm text-foreground bg-input rounded-lg px-3 py-2 hover:bg-muted transition-colors"
-                      onClick={() => {
-                        setFrom(fav.fromPostcode);
-                        setTo(fav.toPostcode);
-                        setShowFavourites(false);
-                        toast.info(`Loaded: ${fav.name}`);
-                      }}
-                    >
-                      <div className="font-medium">{fav.name}</div>
-                      <div className="text-xs text-muted-foreground">{fav.fromPostcode} → {fav.toPostcode}</div>
-                    </button>
-                    <button
-                      className="p-2 text-muted-foreground hover:text-destructive transition-colors"
-                      onClick={() => deleteFavMutation.mutate({ id: fav.id })}
-                    >
-                      <Trash2 size={14} />
-                    </button>
-                  </div>
-                ))}
-              </div>
-            )}
-          </Card>
-        )}
-
-        {/* Search inputs */}
-        <Card className="bg-card border-border">
-          <CardContent className="pt-4 space-y-3">
-            <div className="flex items-center gap-2">
-              <div className="flex flex-col items-center gap-1">
-                <div className="w-3 h-3 rounded-full bg-green-500 border-2 border-green-400" />
-                <div className="w-0.5 h-6 bg-border" />
-                <div className="w-3 h-3 rounded-full bg-red-500 border-2 border-red-400" />
-              </div>
-              <div className="flex-1 space-y-2">
-                <Input
-                  placeholder="From postcode (e.g. MK1 1DF)"
-                  value={from}
-                  onChange={e => setFrom(e.target.value.toUpperCase())}
-                  className="bg-input border-border text-sm uppercase"
-                  maxLength={10}
-                />
-                <Input
-                  placeholder="To postcode (e.g. CR0 4YL)"
-                  value={to}
-                  onChange={e => setTo(e.target.value.toUpperCase())}
-                  className="bg-input border-border text-sm uppercase"
-                  maxLength={10}
-                />
-              </div>
-            </div>
-
-            {/* Departure time */}
-            <div>
-              <button
-                className="flex items-center gap-2 text-xs text-muted-foreground hover:text-foreground transition-colors w-full"
-                onClick={() => setShowTimeOptions(s => !s)}
-              >
-                <CalendarClock size={13} className="text-primary" />
-                <span className="flex-1 text-left">{depLabel}</span>
-                {showTimeOptions ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
-              </button>
-              {showTimeOptions && (
-                <div className="mt-2 space-y-2 pl-5">
-                  <div className="flex gap-2">
-                    <button
-                      onClick={() => setDepartureMode("now")}
-                      className={cn(
-                        "flex-1 text-xs py-1.5 rounded-lg border transition-colors",
-                        departureMode === "now"
-                          ? "border-primary bg-primary/10 text-primary font-semibold"
-                          : "border-border text-muted-foreground"
-                      )}
-                    >
-                      Depart Now
-                    </button>
-                    <button
-                      onClick={() => setDepartureMode("custom")}
-                      className={cn(
-                        "flex-1 text-xs py-1.5 rounded-lg border transition-colors",
-                        departureMode === "custom"
-                          ? "border-primary bg-primary/10 text-primary font-semibold"
-                          : "border-border text-muted-foreground"
-                      )}
-                    >
-                      Choose Time
-                    </button>
-                  </div>
-                  {departureMode === "custom" && (
-                    <div className="grid grid-cols-2 gap-2">
-                      <Input
-                        type="date"
-                        value={departureDate}
-                        onChange={e => setDepartureDate(e.target.value)}
-                        className="bg-input border-border text-xs"
-                        min={format(new Date(), "yyyy-MM-dd")}
-                      />
-                      <Input
-                        type="time"
-                        value={departureTime}
-                        onChange={e => setDepartureTime(e.target.value)}
-                        className="bg-input border-border text-xs"
-                      />
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-
-            <Button
-              onClick={searchRoutes}
-              disabled={loading || !mapReady}
-              className="w-full bg-primary text-primary-foreground font-bold"
-            >
-              {loading ? (
-                <><Loader2 size={16} className="animate-spin mr-2" />Searching routes...</>
-              ) : !mapReady ? (
-                <><Loader2 size={16} className="animate-spin mr-2" />Loading map...</>
-              ) : (
-                <><Zap size={16} className="mr-2" />Find Best Routes</>
-              )}
-            </Button>
-          </CardContent>
-        </Card>
-
-        {/* Map */}
-        <Card className="bg-card border-border overflow-hidden">
-          <div className="relative">
-            <MapView
-              initialCenter={{ lat: 52.5, lng: -1.5 }}
-              initialZoom={6}
-              className="h-72 w-full"
-              onMapReady={(map) => { mapRef.current = map; setMapReady(true); }}
-            />
-            {selectedRoute && (
-              <div className="absolute bottom-2 left-2 bg-background/90 backdrop-blur-sm rounded-lg p-2 text-xs space-y-1 border border-border">
-                {Array.from(new Set(selectedRoute.legs.map(l =>
-                  l.mode === "WALKING" ? "WALKING" : (l.transitMode ?? l.mode)
-                ))).map(type => (
-                  <div key={type} className="flex items-center gap-1.5">
-                    <div className="w-3 h-1.5 rounded-full" style={{ background: LEG_COLOURS[type] ?? "#888" }} />
-                    <span className="text-muted-foreground capitalize">{type.toLowerCase()}</span>
-                  </div>
-                ))}
-              </div>
-            )}
+        {/* ── Start address ──────────────────────────────────────────────── */}
+        <div className="bg-card border border-border rounded-2xl p-4">
+          <div className="flex items-center gap-2 mb-3">
+            <Home size={14} className="text-muted-foreground" />
+            <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Start / Home</span>
           </div>
-        </Card>
+          <div className="relative">
+            <MapPin size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-emerald-400" />
+            <Input
+              value={startPostcode}
+              onChange={e => setStartPostcode(e.target.value.toUpperCase())}
+              placeholder="e.g. BS1 4DJ (defaults to home postcode)"
+              className="pl-8 font-mono tracking-wider text-sm h-10"
+            />
+          </div>
+        </div>
 
-        {/* Save as favourite (shown after search) */}
-        {showSaveFav && isAuthenticated && routes.length > 0 && (
-          <Card className="bg-card border-border">
-            <CardContent className="pt-3 pb-3">
-              <div className="flex items-center gap-2">
-                <Star size={14} className="text-amber-400 flex-shrink-0" />
-                <Input
-                  placeholder="Name this route (e.g. Home → ALD depot)"
-                  value={favName}
-                  onChange={e => setFavName(e.target.value)}
-                  className="bg-input border-border text-sm flex-1"
-                />
-                <Button
-                  size="sm"
-                  disabled={!favName.trim() || savingFav}
-                  onClick={async () => {
-                    setSavingFav(true);
-                    try {
-                      await saveFavMutation.mutateAsync({ name: favName.trim(), fromPostcode: from, toPostcode: to });
-                    } finally { setSavingFav(false); }
-                  }}
-                  className="bg-amber-500 hover:bg-amber-600 text-white text-xs px-3"
-                >
-                  {savingFav ? <Loader2 size={12} className="animate-spin" /> : "Save"}
-                </Button>
-                <button onClick={() => setShowSaveFav(false)} className="text-muted-foreground hover:text-foreground">
-                  ×
-                </button>
-              </div>
-            </CardContent>
-          </Card>
-        )}
-
-        {/* Route History */}
-        {isAuthenticated && (historyItems?.length ?? 0) > 0 && (
-          <Card className="bg-card border-border">
-            <div
-              className="flex items-center justify-between px-4 py-2.5 cursor-pointer"
-              onClick={() => setShowHistory(s => !s)}
-            >
-              <div className="flex items-center gap-2 text-sm font-medium text-foreground">
-                <History size={14} className="text-blue-400" />
-                Route History ({historyItems!.length})
-              </div>
-              {showHistory ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+        {/* ── Job stops ──────────────────────────────────────────────────── */}
+        <div className="bg-card border border-border rounded-2xl p-4 space-y-3">
+          <div className="flex items-center justify-between mb-1">
+            <div className="flex items-center gap-2">
+              <Car size={14} className="text-muted-foreground" />
+              <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Jobs</span>
             </div>
-            {showHistory && (
-              <div className="px-4 pb-3 space-y-2 border-t border-border pt-2">
-                {historyItems!.map((item: any) => (
-                  <div key={item.id} className="flex items-center gap-2">
-                    <button
-                      className="flex-1 text-left text-sm text-foreground bg-input rounded-lg px-3 py-2 hover:bg-muted transition-colors"
-                      onClick={() => {
-                        setFrom(item.fromPostcode);
-                        setTo(item.toPostcode);
-                        setShowHistory(false);
-                        toast.info(`Loaded: ${item.fromPostcode} → ${item.toPostcode}`);
-                      }}
-                    >
-                      <div className="flex items-center justify-between">
-                        <span className="font-medium">{item.fromPostcode} → {item.toPostcode}</span>
-                        {item.estimatedCost && (
-                          <span className="text-green-400 font-semibold text-xs">~£{Number(item.estimatedCost).toFixed(2)}</span>
-                        )}
-                      </div>
-                      <div className="text-xs text-muted-foreground mt-0.5">
-                        {item.dominantMode && <span className="capitalize mr-2">{item.dominantMode.toLowerCase()}</span>}
-                        {item.totalDurationSecs && <span>{formatDuration(item.totalDurationSecs)}</span>}
-                        <span className="ml-2">{new Date(item.usedAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}</span>
-                      </div>
-                    </button>
-                    <button
-                      className="p-2 text-muted-foreground hover:text-blue-400 transition-colors"
-                      title="Share this route"
-                      onClick={() => {
-                        if (!item.legsSnapshot) { toast.error("No route data to share"); return; }
-                        setSharingId(item.id);
-                        createShareMutation.mutate({
-                          fromPostcode: item.fromPostcode,
-                          toPostcode: item.toPostcode,
-                          label: item.label ?? "balanced",
-                          summary: item.summary ?? "",
-                          totalDurationSecs: item.totalDurationSecs ?? undefined,
-                          totalDistanceMetres: item.totalDistanceMetres ?? undefined,
-                          estimatedCost: item.estimatedCost ? Number(item.estimatedCost) : undefined,
-                          dominantMode: item.dominantMode ?? undefined,
-                          departureTime: item.departureTime ?? undefined,
-                          arrivalTime: item.arrivalTime ?? undefined,
-                          legs: (item.legsSnapshot as any[]) ?? [],
-                        });
-                      }}
-                    >
-                      {sharingId === item.id ? <Loader2 size={14} className="animate-spin" /> : <Share2 size={14} />}
-                    </button>
-                    <button
-                      className="p-2 text-muted-foreground hover:text-destructive transition-colors"
-                      onClick={() => deleteHistoryMutation.mutate({ id: item.id })}
-                    >
-                      <Trash2 size={14} />
-                    </button>
-                  </div>
-                ))}
-              </div>
-            )}
-          </Card>
-        )}
+            <span className="text-xs text-muted-foreground">{stops.length}/4</span>
+          </div>
 
-        {/* Route options */}
+          {stops.map((stop, idx) => (
+            <div key={stop.id} className="space-y-2">
+              {idx > 0 && <div className="border-t border-border/50 pt-3" />}
+              <div className="flex items-center justify-between mb-1">
+                <span className="text-xs font-semibold text-foreground">Job {idx + 1}</span>
+                {stops.length > 1 && (
+                  <button onClick={() => removeStop(stop.id)} className="text-muted-foreground hover:text-destructive transition-colors">
+                    <Trash2 size={13} />
+                  </button>
+                )}
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <div className="relative">
+                  <MapPin size={12} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-emerald-400" />
+                  <Input
+                    value={stop.pickupPostcode}
+                    onChange={e => {
+                      updateStop(stop.id, "pickupPostcode", e.target.value.toUpperCase());
+                      // Auto-fill next stop's pickup
+                    }}
+                    onBlur={e => {
+                      const val = e.target.value.toUpperCase();
+                      updateStop(stop.id, "pickupPostcode", val);
+                    }}
+                    placeholder="Pickup"
+                    className="pl-7 font-mono tracking-wider text-xs h-9"
+                  />
+                </div>
+                <div className="relative">
+                  <MapPin size={12} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-red-400" />
+                  <Input
+                    value={stop.dropoffPostcode}
+                    onChange={e => {
+                      const val = e.target.value.toUpperCase();
+                      updateStop(stop.id, "dropoffPostcode", val);
+                      // Auto-fill next stop's pickup if it exists and is empty
+                      const nextStop = stops[idx + 1];
+                      if (nextStop && !nextStop.pickupPostcode) {
+                        updateStop(nextStop.id, "pickupPostcode", val);
+                      }
+                    }}
+                    placeholder="Drop-off"
+                    className="pl-7 font-mono tracking-wider text-xs h-9"
+                  />
+                </div>
+              </div>
+              <div className="relative">
+                <PoundSterling size={12} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
+                <Input
+                  type="number"
+                  value={stop.deliveryFee}
+                  onChange={e => updateStop(stop.id, "deliveryFee", e.target.value)}
+                  placeholder="Delivery fee (optional)"
+                  className="pl-7 text-xs h-9"
+                  min={0}
+                />
+              </div>
+            </div>
+          ))}
+
+          {stops.length < 4 && (
+            <button
+              onClick={addStop}
+              className="w-full flex items-center justify-center gap-1.5 py-2 rounded-xl border border-dashed border-border text-xs text-muted-foreground hover:text-foreground hover:border-primary/40 transition-colors mt-1"
+            >
+              <Plus size={13} />
+              Add another job
+            </button>
+          )}
+        </div>
+
+        {/* ── Optimise button ────────────────────────────────────────────── */}
+        <Button
+          className="w-full h-12 text-base font-bold rounded-xl bg-primary hover:bg-primary/90 text-primary-foreground"
+          onClick={optimiseRoute}
+          disabled={loading || !canOptimise || !mapReady}
+        >
+          {loading ? (
+            <>
+              <Loader2 size={18} className="animate-spin mr-2" />
+              Finding best routes...
+            </>
+          ) : (
+            <>
+              <Zap size={18} className="mr-2" />
+              Optimise Route
+            </>
+          )}
+        </Button>
+
+        {/* ── Map ────────────────────────────────────────────────────────── */}
+        <div className={cn(
+          "rounded-2xl overflow-hidden border border-border transition-all duration-300",
+          routes.length > 0 ? "h-56" : "h-44"
+        )}>
+          <MapView
+            className="w-full h-full"
+            onMapReady={(map) => { mapRef.current = map; setMapReady(true); }}
+          />
+        </div>
+
+        {/* ── Route option cards ─────────────────────────────────────────── */}
         {routes.length > 0 && (
           <div className="space-y-3">
-            <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
-              {routes.length} Route{routes.length > 1 ? "s" : ""} Found
-              {departureMode === "custom" && (
-                <span className="ml-2 text-primary normal-case font-normal">
-                  · {format(getDepartureDate(), "EEE d MMM HH:mm")}
-                </span>
-              )}
-            </h2>
+            <div className="flex items-center gap-2">
+              <Navigation size={14} className="text-primary" />
+              <span className="text-sm font-semibold text-foreground">Route Options</span>
+              <span className="text-xs text-muted-foreground">— tap to select, expand for directions</span>
+            </div>
+
             {routes.map(route => {
-              const cfg = labelConfig[route.label] ?? labelConfig.balanced;
-              const isSelected = selectedRoute?.id === route.id;
+              const cfg = OPTION_CONFIG[route.id];
+              const Icon = cfg.icon;
+              const isSelected = selectedId === route.id;
+              const isExpanded = expandedId === route.id;
 
               return (
-                <Card
+                <div
                   key={route.id}
                   className={cn(
-                    "bg-card border-border cursor-pointer transition-all",
-                    isSelected && "border-primary ring-1 ring-primary/30"
+                    "rounded-2xl border overflow-hidden transition-all duration-200",
+                    isSelected
+                      ? "border-primary/60 bg-primary/5"
+                      : "border-border bg-card"
                   )}
-                  onClick={() => handleSelectRoute(route)}
                 >
-                  <CardContent className="pt-4 pb-3 space-y-3">
-                    <div className="flex items-start justify-between">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <Badge variant="outline" className={cn("text-xs flex items-center gap-1", cfg.colour)}>
-                          {cfg.icon} {cfg.label}
-                        </Badge>
-                        {isSelected && (
-                          <Badge variant="outline" className="text-xs text-primary border-primary/30 bg-primary/10">
-                            <CheckCircle2 size={10} className="mr-1" /> Viewing
-                          </Badge>
-                        )}
-                      </div>
-                      <div className="text-right">
-                        <div className="text-lg font-bold text-foreground">
-                          ~£{route.estimatedCost.toFixed(2)}
-                        </div>
-                        <div className="text-xs text-muted-foreground">
-                          {route.legs.some(l => l.mode === "TRANSIT") ? "est. fare" : "est. cost"}
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="flex items-center gap-4 text-sm">
-                      <div className="flex items-center gap-1 text-foreground font-semibold">
-                        <Clock size={13} className="text-muted-foreground" />
-                        {formatDuration(route.totalDurationSecs)}
-                      </div>
-                      <div className="flex items-center gap-1 text-muted-foreground text-xs">
-                        <MapPin size={12} />
-                        {(route.totalDistanceMetres / 1609.34).toFixed(1)} mi
-                      </div>
-                      {route.departureTime && (
-                        <div className="text-xs text-muted-foreground">Dep. {route.departureTime}</div>
-                      )}
-                      {route.arrivalTime && (
-                        <div className="text-xs text-muted-foreground">Arr. {route.arrivalTime}</div>
-                      )}
-                    </div>
-
-                    {/* Leg strip */}
-                    <div className="flex items-center gap-1 flex-wrap">
-                      {route.legs.map((leg, i) => (
-                        <div key={i} className="flex items-center gap-1">
-                          <div
-                            className="flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium"
-                            style={{
-                              background: getLegColour(leg) + "22",
-                              color: getLegColour(leg),
-                              border: `1px solid ${getLegColour(leg)}44`,
-                            }}
-                          >
-                            {getLegIcon(leg)}
-                            {leg.mode === "WALKING"
-                              ? `${Math.round(leg.distanceMetres)}m walk`
-                              : leg.mode === "DRIVING"
-                              ? `Drive ${(leg.distanceMetres / 1609.34).toFixed(1)}mi`
-                              : leg.lineShortName || leg.lineName || leg.transitMode?.toLowerCase()}
+                  {/* Summary row — always visible */}
+                  <button
+                    className="w-full text-left p-4"
+                    onClick={() => handleSelectRoute(route)}
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      {/* Left: label + tagline */}
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 mb-1">
+                          <div className={cn("flex items-center gap-1 px-2 py-0.5 rounded-full border text-xs font-semibold", cfg.bg, cfg.colour)}>
+                            <Icon size={11} />
+                            {route.label}
                           </div>
-                          {i < route.legs.length - 1 && (
-                            <ChevronRight size={10} className="text-muted-foreground flex-shrink-0" />
-                          )}
+                          <span className={cn("text-xs font-bold px-2 py-0.5 rounded-full border", gradeColour(route.grade))}>
+                            {route.grade}
+                          </span>
+                          {isSelected && <CheckCircle2 size={14} className="text-primary" />}
                         </div>
-                      ))}
+                        <p className="text-xs text-muted-foreground">{route.tagline}</p>
+                      </div>
+
+                      {/* Right: key stats */}
+                      <div className="text-right shrink-0">
+                        <div className="flex items-center gap-1 justify-end text-foreground font-bold text-sm">
+                          <Clock size={12} className="text-muted-foreground" />
+                          {formatDuration(route.totalDurationSecs)}
+                        </div>
+                        <div className="text-xs text-muted-foreground">{route.totalDistanceMiles} mi</div>
+                      </div>
                     </div>
 
-                    {/* Expanded step-by-step */}
-                    {isSelected && (
-                      <div className="mt-2 space-y-1.5 border-t border-border pt-2">
-                        {route.legs.map((leg, i) => (
-                          <div key={i} className="flex items-start gap-2 text-xs">
-                            <div
-                              className="mt-0.5 flex-shrink-0 w-5 h-5 rounded-full flex items-center justify-center"
-                              style={{ background: getLegColour(leg) + "33", color: getLegColour(leg) }}
-                            >
-                              {getLegIcon(leg)}
+                    {/* Stats row */}
+                    <div className="grid grid-cols-3 gap-2 mt-3">
+                      <div className="bg-background/60 rounded-xl p-2 text-center">
+                        <div className="text-xs text-muted-foreground mb-0.5">Fuel cost</div>
+                        <div className="text-sm font-bold text-foreground">£{route.fuelCostEstimate.toFixed(2)}</div>
+                      </div>
+                      <div className="bg-background/60 rounded-xl p-2 text-center">
+                        <div className="text-xs text-muted-foreground mb-0.5">Net profit</div>
+                        <div className={cn("text-sm font-bold", route.netProfit >= 0 ? "text-emerald-400" : "text-red-400")}>
+                          {route.netProfit >= 0 ? "+" : ""}£{route.netProfit.toFixed(2)}
+                        </div>
+                      </div>
+                      <div className="bg-background/60 rounded-xl p-2 text-center">
+                        <div className="text-xs text-muted-foreground mb-0.5">£/hr</div>
+                        <div className="text-sm font-bold text-foreground">
+                          £{route.totalDurationSecs > 0
+                            ? (route.netProfit / (route.totalDurationSecs / 3600)).toFixed(2)
+                            : "—"}
+                        </div>
+                      </div>
+                    </div>
+                  </button>
+
+                  {/* Expand/collapse directions */}
+                  <div className="px-4 pb-3 space-y-2">
+                    <div className="flex gap-2">
+                      {/* Save as Job */}
+                      {isSelected && (
+                        <Button
+                          size="sm"
+                          className="flex-1 h-8 text-xs font-semibold bg-primary/15 hover:bg-primary/25 text-primary border border-primary/30"
+                          variant="outline"
+                          onClick={() => handleSaveAsJob(route)}
+                          disabled={savingId === route.id}
+                        >
+                          {savingId === route.id ? (
+                            <Loader2 size={12} className="animate-spin mr-1" />
+                          ) : (
+                            <Star size={12} className="mr-1" />
+                          )}
+                          Save as Job
+                        </Button>
+                      )}
+
+                      {/* Toggle directions */}
+                      <button
+                        onClick={() => setExpandedId(isExpanded ? null : route.id)}
+                        className={cn(
+                          "flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors px-3 py-1.5 rounded-lg border border-border hover:border-primary/30",
+                          isSelected ? "flex-1" : "w-full"
+                        )}
+                      >
+                        {isExpanded ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
+                        {isExpanded ? "Hide directions" : "Show full directions"}
+                      </button>
+                    </div>
+
+                    {/* Full directions */}
+                    {isExpanded && (
+                      <div className="bg-background/60 rounded-xl p-3 space-y-2 max-h-64 overflow-y-auto">
+                        {route.warnings.length > 0 && (
+                          <div className="bg-amber-500/10 border border-amber-500/30 rounded-lg p-2 mb-2">
+                            {route.warnings.map((w, i) => (
+                              <p key={i} className="text-xs text-amber-400">{w}</p>
+                            ))}
+                          </div>
+                        )}
+                        {route.steps.map((step, i) => (
+                          <div key={i} className="flex gap-2 items-start">
+                            <div className="w-5 h-5 rounded-full bg-primary/10 border border-primary/20 flex items-center justify-center shrink-0 mt-0.5">
+                              <span className="text-[9px] font-bold text-primary">{i + 1}</span>
                             </div>
-                            <div className="flex-1">
-                              {leg.mode === "TRANSIT" ? (
-                                <span className="text-foreground">
-                                  <span className="font-medium" style={{ color: getLegColour(leg) }}>
-                                    {leg.lineName || leg.transitMode}
-                                  </span>
-                                  {leg.departureStop && ` from ${leg.departureStop}`}
-                                  {leg.arrivalStop && ` → ${leg.arrivalStop}`}
-                                  {leg.numStops ? ` (${leg.numStops} stops)` : ""}
-                                  {leg.departureTime && ` · dep. ${leg.departureTime}`}
-                                  {leg.estimatedFare !== undefined && (
-                                    <span className="ml-1 text-green-400 font-semibold">
-                                      ~£{leg.estimatedFare.toFixed(2)}
-                                    </span>
-                                  )}
-                                </span>
-                              ) : leg.mode === "WALKING" ? (
-                                <span className="text-muted-foreground">
-                                  Walk {leg.distanceMetres < 1000
-                                    ? `${Math.round(leg.distanceMetres)}m`
-                                    : `${(leg.distanceMetres / 1000).toFixed(1)}km`}
-                                </span>
-                              ) : (
-                                <span className="text-muted-foreground">
-                                  Drive {(leg.distanceMetres / 1609.34).toFixed(1)} miles
-                                </span>
-                              )}
+                            <div className="flex-1 min-w-0">
+                              <p className="text-xs text-foreground leading-snug">{step.instruction}</p>
+                              <p className="text-[10px] text-muted-foreground mt-0.5">
+                                {step.distanceText}{step.distanceText && step.durationText ? " · " : ""}{step.durationText}
+                              </p>
                             </div>
-                            <span className="text-muted-foreground flex-shrink-0">
-                              {formatDuration(leg.durationSecs)}
-                            </span>
                           </div>
                         ))}
-                        {/* Fare note */}
-                        {route.legs.some(l => l.mode === "TRANSIT") && (
-                          <p className="text-xs text-muted-foreground mt-1 italic">
-                            Fares based on UK Anytime Single rates. Advance tickets may be cheaper.
-                          </p>
-                        )}
                       </div>
                     )}
-
-                    {route.warnings.length > 0 && (
-                      <div className="text-xs text-amber-400 bg-amber-400/10 rounded p-2">
-                        {route.warnings[0]}
-                      </div>
-                    )}
-
-                    <div className="flex gap-2 mt-1">
-                      {isSelected && onUseRoute && (
-                        <Button
-                          size="sm"
-                          className="flex-1 bg-primary text-primary-foreground font-semibold"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            const dominantMode = route.legs.find(l => l.mode === "TRANSIT")?.transitMode ?? "DRIVING";
-                            onUseRoute(route.estimatedCost, dominantMode.toLowerCase(), route.summary);
-                            toast.success(`Route cost £${route.estimatedCost.toFixed(2)} added to travel expenses`);
-                          }}
-                        >
-                          <CheckCircle2 size={14} className="mr-2" />
-                          Use This Route — £{route.estimatedCost.toFixed(2)}
-                        </Button>
-                      )}
-                      {isSelected && isAuthenticated && (
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          className="border-border text-muted-foreground hover:text-foreground"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setSharingId(0);
-                            const legs = route.legs.map(l => ({
-                              mode: l.mode,
-                              summary: l.lineName ?? l.mode,
-                              durationSecs: l.durationSecs,
-                              distanceMetres: l.distanceMetres,
-                              departureTime: l.departureTime,
-                              arrivalTime: l.arrivalTime,
-                              lineName: l.lineName,
-                              departureStop: l.departureStop,
-                              arrivalStop: l.arrivalStop,
-                              numStops: l.numStops,
-                              polyline: l.polyline,
-                              estimatedFare: l.estimatedFare,
-                            }));
-                            createShareMutation.mutate({
-                              fromPostcode: from,
-                              toPostcode: to,
-                              label: route.label,
-                              summary: route.summary,
-                              totalDurationSecs: route.totalDurationSecs,
-                              totalDistanceMetres: route.totalDistanceMetres,
-                              estimatedCost: route.estimatedCost,
-                              dominantMode: route.legs.find(l => l.mode === "TRANSIT")?.transitMode ?? "DRIVING",
-                              departureTime: route.departureTime,
-                              arrivalTime: route.arrivalTime,
-                              legs,
-                            });
-                          }}
-                          title="Share this route"
-                        >
-                          {sharingId === 0 && createShareMutation.isPending
-                            ? <Loader2 size={14} className="animate-spin" />
-                            : <Share2 size={14} />}
-                        </Button>
-                      )}
-                    </div>
-                  </CardContent>
-                </Card>
+                  </div>
+                </div>
               );
             })}
           </div>
         )}
 
+        {/* ── Empty state ────────────────────────────────────────────────── */}
         {routes.length === 0 && !loading && (
-          <div className="text-center py-12 text-muted-foreground">
-            <Navigation size={40} className="mx-auto mb-3 opacity-30" />
-            <p className="text-sm font-medium">Enter postcodes above to find routes</p>
-            <p className="text-xs mt-1">Compares train, bus, and driving options in real time</p>
-            {!isAuthenticated && (
-              <p className="text-xs mt-2 text-primary">Sign in to save favourite routes</p>
-            )}
+          <div className="text-center py-8 text-muted-foreground">
+            <Route size={36} className="mx-auto mb-3 opacity-30" />
+            <p className="text-sm font-medium">Add your jobs above</p>
+            <p className="text-xs mt-1">Enter pickup and drop-off postcodes, then tap Optimise Route to get the best 3 options.</p>
           </div>
         )}
+
       </div>
     </div>
   );
