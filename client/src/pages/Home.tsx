@@ -238,10 +238,10 @@ export default function Home() {
   useEffect(() => {
     if (userSettings) {
       setSettings({
-        vehicleMpg: userSettings.vehicleMpg,
-        hourlyRate: userSettings.hourlyRate,
-        wearTearPerMile: userSettings.wearTearPerMile,
-        riskBufferPercent: userSettings.riskBufferPercent,
+        vehicleMpg: Number(userSettings.vehicleMpg) || 35,
+        hourlyRate: Number(userSettings.hourlyRate) || 15,
+        wearTearPerMile: Number(userSettings.wearTearPerMile) || 0.15,
+        riskBufferPercent: Number(userSettings.riskBufferPercent) || 10,
         enableTimeValue: userSettings.enableTimeValue,
         enableWearTear: userSettings.enableWearTear,
       });
@@ -364,9 +364,10 @@ export default function Home() {
           pickupPostcode: job.pickupPostcode,
           dropoffPostcode: job.dropoffPostcode,
           deliveryFee: parseFloat(job.deliveryFee) || 0,
-          fuelDeposit: parseFloat(job.fuelDeposit) || 0,
           brokerFeePercent: parseFloat(job.brokerFeePercent) || 0,
           fuelReimbursed: job.fuelReimbursed,
+          scannedDistanceMiles: job.scannedDistanceMiles,
+          scannedDurationMins: job.scannedDurationMins,
           // Travel expenses only on first job (to-job) and last job (home)
           travelToJobCost: idx === 0 ? (parseFloat(travel.travelToJobCost) || 0) : 0,
           travelToJobMode: idx === 0 ? (travel.travelToJobMode as "train" | "bus" | "taxi" | "own_car" | "none") : "none",
@@ -408,7 +409,6 @@ export default function Home() {
           pickupPostcode: job.pickupPostcode,
           dropoffPostcode: job.dropoffPostcode,
           deliveryFee: parseFloat(job.deliveryFee) || 0,
-          fuelDeposit: parseFloat(job.fuelDeposit) || 0,
           brokerFeePercent: parseFloat(job.brokerFeePercent) || 0,
           fuelReimbursed: job.fuelReimbursed,
           travelToJobCost: idx === 0 ? (parseFloat(travel.travelToJobCost) || 0) : 0,
@@ -809,16 +809,24 @@ export default function Home() {
                     </div>
                   </div>
                   <div>
-                    <Label className="text-xs text-muted-foreground mb-1.5 block flex items-center gap-1">
-                      Fuel Deposit (£)
-                      <span className="text-primary text-xs font-normal">(+income)</span>
-                    </Label>
+                    <Label className="text-xs text-muted-foreground mb-1.5 block">Miles</Label>
                     <div className="relative">
-                      <Fuel size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-primary" />
-                      <Input type="number" placeholder="0.00" value={job.fuelDeposit}
-                        onChange={e => updateJob(job.id, "fuelDeposit", e.target.value)}
-                        className="pl-8 bg-input border-primary/30 text-sm" min="0" step="0.01" />
+                      <Route size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+                      <Input type="number" placeholder="e.g. 120" value={job.scannedDistanceMiles ?? ""}
+                        onChange={e => updateJob(job.id, "scannedDistanceMiles", e.target.value ? parseFloat(e.target.value) : undefined)}
+                        className="pl-8 bg-input border-border text-sm" min="0" step="1" />
                     </div>
+                  </div>
+                </div>
+
+                {/* Driving time */}
+                <div>
+                  <Label className="text-xs text-muted-foreground mb-1.5 block">Driving Time (mins)</Label>
+                  <div className="relative">
+                    <Clock size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+                    <Input type="number" placeholder="e.g. 90" value={job.scannedDurationMins ?? ""}
+                      onChange={e => updateJob(job.id, "scannedDurationMins", e.target.value ? parseInt(e.target.value) : undefined)}
+                      className="pl-8 bg-input border-border text-sm" min="0" step="5" />
                   </div>
                 </div>
 

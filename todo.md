@@ -506,3 +506,10 @@
 - [x] Map showing the selected route option
 - [x] Expandable full directions panel per route option
 - [x] Save selected route as job (pre-fills Check page)
+
+## Bug Fixes & UX Improvements (March 2026)
+
+- [ ] Fix Chain Planner "check your postcodes" calculation error
+- [ ] Replace Fuel Deposit with Miles + Driving Time fields on job form
+- [ ] Show miles and driving time on job cards
+- [ ] Use miles/driving time in Route Planner for fuel cost and time on road

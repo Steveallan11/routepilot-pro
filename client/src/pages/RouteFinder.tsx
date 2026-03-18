@@ -90,6 +90,7 @@ export default function RouteFinder() {
   const markersRef = useRef<google.maps.marker.AdvancedMarkerElement[]>([]);
 
   const { data: settings } = trpc.settings.get.useQuery(undefined, { enabled: isAuthenticated });
+  const { data: fuelData } = trpc.fuel.averages.useQuery(undefined, { enabled: isAuthenticated });
   const createJobMutation = trpc.jobs.create.useMutation();
 
   // Auto-fill start postcode from settings
@@ -210,8 +211,10 @@ export default function RouteFinder() {
       );
 
       const totalFee = validStops.reduce((s, j) => s + (Number(j.deliveryFee) || 0), 0);
-      const mpg = settings?.vehicleMpg ?? 35;
-      const fuelPencePerLitre = 145; // approx UK average
+      const mpg = Number(settings?.vehicleMpg) || 35;
+      const hourlyRate = Number(settings?.hourlyRate) || 15;
+      // Use live fuel price from fuel tracker, or UK average fallback
+      const fuelPencePerLitre = fuelData?.petrolPencePerLitre ?? 145;
 
       const candidates: RouteOption[] = [];
       const seenDurations = new Set<number>();
@@ -238,12 +241,13 @@ export default function RouteFinder() {
         const netProfit = Math.round((totalFee - fuelCostEstimate) * 100) / 100;
         const profitPerHour = totalDuration > 0 ? (netProfit / (totalDuration / 3600)) : 0;
 
-        // Grade
+        // Grade — based on user's hourly rate target
+        const hr = hourlyRate;
         let grade: RouteOption["grade"] = "D";
-        if (profitPerHour >= 18) grade = "A+";
-        else if (profitPerHour >= 14) grade = "A";
-        else if (profitPerHour >= 10) grade = "B";
-        else if (profitPerHour >= 6) grade = "C";
+        if (profitPerHour >= hr * 1.2) grade = "A+";
+        else if (profitPerHour >= hr) grade = "A";
+        else if (profitPerHour >= hr * 0.75) grade = "B";
+        else if (profitPerHour >= hr * 0.5) grade = "C";
 
         // Extract polylines and steps
         const polylines: string[] = [];

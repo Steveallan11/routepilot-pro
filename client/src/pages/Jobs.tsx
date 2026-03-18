@@ -379,14 +379,23 @@ function JobDetailSheet({ job, onClose, onStatusChange, onDelete, onEdit, onDupl
                 </p>
               </div>
               <div className="text-right space-y-1">
-                {(job.estimatedDistanceMiles || job.actualDistanceMiles) && (
-                  <p className="text-sm font-mono text-muted-foreground">
-                    {fmt(job.actualDistanceMiles ?? job.estimatedDistanceMiles, 1)} mi
-                  </p>
+                {/* Prefer scanned/manual values, fall back to estimated */}
+                {(job.scannedDistanceMiles || job.estimatedDistanceMiles || job.actualDistanceMiles) && (
+                  <div className="flex items-center justify-end gap-1">
+                    <Route size={11} className="text-muted-foreground" />
+                    <p className="text-sm font-mono font-semibold text-foreground">
+                      {fmt(job.scannedDistanceMiles ?? job.actualDistanceMiles ?? job.estimatedDistanceMiles, 1)} mi
+                    </p>
+                  </div>
                 )}
-                {(job.estimatedDurationMins || job.actualDurationMins) && (() => {
-                  const mins = job.actualDurationMins ?? job.estimatedDurationMins ?? 0;
-                  return <p className="text-sm font-mono text-muted-foreground">{Math.floor(mins / 60)}h {Math.round(mins % 60)}m</p>;
+                {(job.scannedDurationMins || job.estimatedDurationMins || job.actualDurationMins) && (() => {
+                  const mins = job.scannedDurationMins ?? job.actualDurationMins ?? job.estimatedDurationMins ?? 0;
+                  return (
+                    <div className="flex items-center justify-end gap-1">
+                      <Clock size={11} className="text-muted-foreground" />
+                      <p className="text-sm font-mono font-semibold text-foreground">{Math.floor(mins / 60)}h {Math.round(mins % 60)}m</p>
+                    </div>
+                  );
                 })()}
               </div>
             </div>
